@@ -430,7 +430,14 @@ a {
 }
 
 .chart-box {
-    min-height: 300px;
+    min-height: auto;
+}
+
+.chart-box canvas {
+    display: block;
+    width: 100% !important;
+    height: 280px !important;
+    max-height: 280px;
 }
 
 @media (max-width: 991px) {
@@ -462,5 +469,10 @@ a {
     .footer {
         margin: 0 12px 18px;
         text-align: center;
+    }
+
+    .chart-box canvas {
+        height: 240px !important;
+        max-height: 240px;
     }
 }

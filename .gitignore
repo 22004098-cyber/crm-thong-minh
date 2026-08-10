@@ -17,6 +17,7 @@ backup_before_refactor_*.zip
 
 .chrome_qa/
 .chrome_qa2/
+.chrome_chart_qa/
 
 # SQLite is created at runtime. Keep it local unless a persistent disk is configured.
 crm.db
