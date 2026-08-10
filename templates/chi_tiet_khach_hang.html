@@ -6,6 +6,11 @@
 <div class="alert alert-danger rounded-4">Không tìm thấy khách hàng {{ customer_code }}.</div>
 <a href="{{ url_for('phan_tich') }}" class="btn btn-primary">Quay lại phân tích</a>
 {% else %}
+{% if email_status == "success" %}
+<div class="alert alert-success rounded-4">Email chăm sóc đã được gửi thành công và trạng thái đã được lưu.</div>
+{% elif email_status == "error" %}
+<div class="alert alert-danger rounded-4">Chưa gửi được email chăm sóc. Hệ thống đã lưu trạng thái lỗi, vui lòng kiểm tra cấu hình Resend hoặc nội dung email.</div>
+{% endif %}
 <section class="profile-hero mb-4">
     <div>
         <p class="mb-1">Hồ sơ khách hàng</p>
@@ -32,17 +37,38 @@
             </div>
             <div class="alert alert-info rounded-4 mt-3 mb-0"><strong>Đề xuất CRM:</strong><br>{{ customer.ChamSoc }}</div>
         </div></div>
+
+        <div class="modern-card mt-4"><div class="card-body">
+            <h5 class="section-title">Lý do nguy cơ rời bỏ</h5>
+            <div class="alert alert-warning rounded-4 mb-0">
+                Project hiện chỉ có dữ liệu kết quả dự đoán trong CSV gồm xác suất LSTM, XGBoost và mô hình kết hợp.
+                Chưa có dữ liệu đặc trưng gốc, feature importance, SHAP hoặc file model XGBoost để giải thích nguyên nhân riêng cho từng khách hàng.
+                Vì vậy hệ thống không hiển thị nguyên nhân giả.
+            </div>
+        </div></div>
     </div>
     <div class="col-lg-4">
         <div class="modern-card h-100"><div class="card-body">
-            <h5 class="section-title">Thao tác chăm sóc</h5>
-            <p class="text-muted">Gửi chăm sóc sẽ cập nhật SQLite và lưu lịch sử cho khách hàng này.</p>
+            <h5 class="section-title">Email chăm sóc</h5>
+            <p class="text-muted">Nhân viên kiểm tra nội dung trước khi gửi. Trạng thái chỉ chuyển thành đã chăm sóc khi Resend gửi thành công.</p>
             {% if customer.TrangThaiChamSoc == STATUS_DONE %}
             <button class="btn btn-success w-100" disabled>Đã chăm sóc</button>
             {% else %}
             <form method="POST" action="{{ url_for('gui_cham_soc', customer_code=customer.MaHienThi) }}">
                 <input type="hidden" name="next" value="{{ url_for('chi_tiet_khach_hang', customer_code=customer.MaHienThi) }}">
-                <button type="submit" class="btn btn-primary w-100">Gửi chăm sóc</button>
+                <div class="mb-3">
+                    <label class="form-label">Email khách hàng</label>
+                    <input type="email" name="recipient_email" class="form-control" placeholder="khachhang@example.com" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Tiêu đề</label>
+                    <input type="text" name="email_subject" class="form-control" value="{{ default_subject }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nội dung</label>
+                    <textarea name="email_content" class="form-control" rows="8" required>{{ default_content }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Gửi email chăm sóc</button>
             </form>
             {% endif %}
         </div></div>
@@ -53,12 +79,21 @@
     <h5 class="section-title">Lịch sử chăm sóc</h5>
     <div class="table-responsive">
         <table class="table table-hover align-middle">
-            <thead><tr><th>Mã KH</th><th>Phân khúc</th><th>Hành động</th><th>Trạng thái</th><th>Thời gian</th></tr></thead>
+            <thead><tr><th>Mã KH</th><th>Phân khúc</th><th>Email</th><th>Tiêu đề</th><th>Trạng thái</th><th>Thời gian</th></tr></thead>
             <tbody>
             {% for h in history %}
-            <tr><td class="fw-bold">{{ h.customer_code }}</td><td>{{ h.segment }}</td><td>{{ h.action }}</td><td>{{ h.status }}</td><td>{{ h.updated_at }}</td></tr>
+            <tr>
+                <td class="fw-bold">{{ h.customer_code }}</td>
+                <td>{{ h.segment }}</td>
+                <td>{{ h.recipient_email or "Chưa có" }}</td>
+                <td>{{ h.email_subject or h.action }}</td>
+                <td>
+                    <span class="badge {% if h.status == STATUS_DONE %}bg-success{% elif h.status == STATUS_FAILED %}bg-danger{% else %}bg-secondary{% endif %}">{{ h.status }}</span>
+                </td>
+                <td>{{ h.updated_at }}</td>
+            </tr>
             {% else %}
-            <tr><td colspan="5" class="text-center text-muted">Khách hàng này chưa có lịch sử chăm sóc.</td></tr>
+            <tr><td colspan="6" class="text-center text-muted">Khách hàng này chưa có lịch sử chăm sóc.</td></tr>
             {% endfor %}
             </tbody>
         </table>

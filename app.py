@@ -1,9 +1,15 @@
+import csv
+import io
+import json
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import pandas as pd
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, Response, redirect, render_template, request, url_for
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -30,6 +36,8 @@ SEGMENT_MEDIUM = "Cần quan tâm"
 SEGMENT_SAFE = "An toàn"
 STATUS_PENDING = "Chưa chăm sóc"
 STATUS_DONE = "Đã chăm sóc"
+STATUS_FAILED = "Gửi lỗi"
+RESEND_API_URL = "https://api.resend.com/emails"
 
 
 def init_db():
@@ -50,6 +58,21 @@ def init_db():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_care_customer ON care_history(customer_code)"
         )
+        existing_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(care_history)").fetchall()
+        }
+        migrations = {
+            "recipient_email": "TEXT",
+            "email_subject": "TEXT",
+            "email_content": "TEXT",
+            "provider_message_id": "TEXT",
+            "error_message": "TEXT",
+        }
+        for column, column_type in migrations.items():
+            if column not in existing_columns:
+                conn.execute(
+                    f"ALTER TABLE care_history ADD COLUMN {column} {column_type}"
+                )
 
 
 def get_db_rows(query, params=()):
@@ -94,12 +117,14 @@ def badge_class(segment):
 def load_care_status_map():
     rows = get_db_rows(
         """
-        SELECT customer_code, status, MAX(updated_at) AS updated_at
+        SELECT customer_code
         FROM care_history
+        WHERE status = ?
         GROUP BY customer_code
-        """
+        """,
+        (STATUS_DONE,),
     )
-    return {row["customer_code"]: row["status"] for row in rows}
+    return {row["customer_code"]: STATUS_DONE for row in rows}
 
 
 def load_data():
@@ -205,7 +230,9 @@ def recent_history(limit=20, customer_code=None):
     if customer_code:
         return get_db_rows(
             """
-            SELECT customer_code, segment, action, status, created_at, updated_at
+            SELECT customer_code, segment, action, status, created_at, updated_at,
+                   recipient_email, email_subject, email_content,
+                   provider_message_id, error_message
             FROM care_history
             WHERE customer_code = ?
             ORDER BY updated_at DESC, id DESC
@@ -215,7 +242,9 @@ def recent_history(limit=20, customer_code=None):
         )
     return get_db_rows(
         """
-        SELECT customer_code, segment, action, status, created_at, updated_at
+        SELECT customer_code, segment, action, status, created_at, updated_at,
+               recipient_email, email_subject, email_content,
+               provider_message_id, error_message
         FROM care_history
         ORDER BY updated_at DESC, id DESC
         LIMIT ?
@@ -224,29 +253,48 @@ def recent_history(limit=20, customer_code=None):
     )
 
 
-def save_care_action(customer_code):
+def save_care_action(
+    customer_code,
+    recipient_email=None,
+    email_subject=None,
+    email_content=None,
+    status=STATUS_DONE,
+    provider_message_id=None,
+    error_message=None,
+):
     customer = find_customer(customer_code)
     if not customer:
         return False
 
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
     existing = get_db_rows(
-        "SELECT id FROM care_history WHERE customer_code = ? ORDER BY id DESC LIMIT 1",
-        (customer["MaHienThi"],),
+        """
+        SELECT id FROM care_history
+        WHERE customer_code = ? AND status = ?
+        ORDER BY id DESC LIMIT 1
+        """,
+        (customer["MaHienThi"], status),
     )
     with sqlite3.connect(DB_PATH) as conn:
         if existing:
             conn.execute(
                 """
                 UPDATE care_history
-                SET segment = ?, action = ?, status = ?, updated_at = ?
+                SET segment = ?, action = ?, status = ?, updated_at = ?,
+                    recipient_email = ?, email_subject = ?, email_content = ?,
+                    provider_message_id = ?, error_message = ?
                 WHERE id = ?
                 """,
                 (
                     customer["PhanKhuc"],
                     customer["ChamSoc"],
-                    STATUS_DONE,
+                    status,
                     now,
+                    recipient_email,
+                    email_subject,
+                    email_content,
+                    provider_message_id,
+                    error_message,
                     existing[0]["id"],
                 ),
             )
@@ -254,19 +302,131 @@ def save_care_action(customer_code):
             conn.execute(
                 """
                 INSERT INTO care_history
-                    (customer_code, segment, action, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (customer_code, segment, action, status, created_at, updated_at,
+                     recipient_email, email_subject, email_content,
+                     provider_message_id, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     customer["MaHienThi"],
                     customer["PhanKhuc"],
                     customer["ChamSoc"],
-                    STATUS_DONE,
+                    status,
                     now,
                     now,
+                    recipient_email,
+                    email_subject,
+                    email_content,
+                    provider_message_id,
+                    error_message,
                 ),
             )
     return True
+
+
+def default_email_subject(customer):
+    return f"CRM Thông Minh - Đề xuất chăm sóc khách hàng {customer['MaHienThi']}"
+
+
+def default_email_content(customer):
+    return (
+        f"Xin chào khách hàng {customer['MaHienThi']},\n\n"
+        "CRM Thông Minh ghi nhận quý khách thuộc nhóm cần được chăm sóc phù hợp. "
+        f"Đề xuất hiện tại: {customer['ChamSoc']}.\n\n"
+        "Nhân viên phụ trách sẽ liên hệ và hỗ trợ quý khách trong thời gian sớm nhất.\n\n"
+        "Trân trọng,\nCRM Thông Minh"
+    )
+
+
+def send_resend_email(recipient_email, subject, content):
+    api_key = os.environ.get("RESEND_API_KEY")
+    from_email = os.environ.get("RESEND_FROM_EMAIL")
+    if not api_key or not from_email:
+        return False, None, "Thiếu RESEND_API_KEY hoặc RESEND_FROM_EMAIL."
+
+    payload = {
+        "from": from_email,
+        "to": [recipient_email],
+        "subject": subject,
+        "text": content,
+    }
+    request_payload = json.dumps(payload).encode("utf-8")
+    req = Request(
+        RESEND_API_URL,
+        data=request_payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(req, timeout=20) as response:
+            response_body = response.read().decode("utf-8")
+            data = json.loads(response_body) if response_body else {}
+            return True, data.get("id"), None
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        return False, None, f"Resend HTTP {exc.code}: {body}"
+    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+        return False, None, str(exc)
+
+
+def filter_customers(df, segment=None, status=None):
+    filtered = df.copy()
+    if segment and segment != "all":
+        filtered = filtered[filtered["PhanKhuc"] == segment]
+    if status and status != "all":
+        filtered = filtered[filtered["TrangThaiChamSoc"] == status]
+    return filtered
+
+
+def get_retention_context(df):
+    total_high = int((df["PhanKhuc"] == SEGMENT_HIGH).sum()) if not df.empty else 0
+    cared = int((df["TrangThaiChamSoc"] == STATUS_DONE).sum()) if not df.empty else 0
+    pending = int((df["TrangThaiChamSoc"] == STATUS_PENDING).sum()) if not df.empty else 0
+    total = len(df)
+    processed_rate = round(cared / total * 100, 2) if total else 0
+    return {
+        "total_high": total_high,
+        "cared": cared,
+        "pending": pending,
+        "processed_rate": processed_rate,
+    }
+
+
+def customers_csv_response(customers, filename):
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "Ma KH",
+            "LSTM",
+            "XGBoost",
+            "Ensemble",
+            "Phan khuc",
+            "De xuat CRM",
+            "Trang thai cham soc",
+        ]
+    )
+    for customer in customers:
+        writer.writerow(
+            [
+                customer.get("MaHienThi", ""),
+                round(float(customer.get("XacSuat_LSTM", 0)) * 100, 2),
+                round(float(customer.get("XacSuat_XGBoost", 0)) * 100, 2),
+                round(float(customer.get("XacSuat_Ensemble", 0)) * 100, 2),
+                customer.get("PhanKhuc", ""),
+                customer.get("ChamSoc", ""),
+                customer.get("TrangThaiChamSoc", ""),
+            ]
+        )
+    csv_data = "\ufeff" + output.getvalue()
+    return Response(
+        csv_data,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 init_db()
@@ -318,6 +478,7 @@ def inject_globals():
         "SEGMENT_SAFE": SEGMENT_SAFE,
         "STATUS_PENDING": STATUS_PENDING,
         "STATUS_DONE": STATUS_DONE,
+        "STATUS_FAILED": STATUS_FAILED,
     }
 
 
@@ -373,9 +534,88 @@ def cham_soc():
 
 @app.route("/cham-soc/gui/<customer_code>", methods=["POST"])
 def gui_cham_soc(customer_code):
-    save_care_action(customer_code)
+    customer = find_customer(customer_code)
     next_url = request.form.get("next") or url_for("cham_soc")
-    return redirect(next_url)
+    if not customer:
+        return redirect(next_url)
+
+    recipient_email = (request.form.get("recipient_email") or "").strip()
+    email_subject = (request.form.get("email_subject") or "").strip()
+    email_content = (request.form.get("email_content") or "").strip()
+    if not recipient_email or not email_subject or not email_content:
+        save_care_action(
+            customer_code,
+            recipient_email=recipient_email,
+            email_subject=email_subject,
+            email_content=email_content,
+            status=STATUS_FAILED,
+            error_message="Thiếu email người nhận, tiêu đề hoặc nội dung.",
+        )
+        return redirect(f"{next_url}?email_status=error")
+
+    success, provider_message_id, error_message = send_resend_email(
+        recipient_email, email_subject, email_content
+    )
+    if success:
+        save_care_action(
+            customer_code,
+            recipient_email=recipient_email,
+            email_subject=email_subject,
+            email_content=email_content,
+            status=STATUS_DONE,
+            provider_message_id=provider_message_id,
+        )
+        return redirect(f"{next_url}?email_status=success")
+
+    save_care_action(
+        customer_code,
+        recipient_email=recipient_email,
+        email_subject=email_subject,
+        email_content=email_content,
+        status=STATUS_FAILED,
+        error_message=error_message,
+    )
+    return redirect(f"{next_url}?email_status=error")
+
+
+@app.route("/chien-dich-giu-chan")
+def chien_dich_giu_chan():
+    df = load_data()
+    segment = request.args.get("segment", "all")
+    status = request.args.get("status", "all")
+    if not df.empty:
+        df["priority"] = df["PhanKhuc"].map({SEGMENT_HIGH: 0, SEGMENT_MEDIUM: 1}).fillna(2)
+        df = df.sort_values(["priority", "XacSuat_Ensemble"], ascending=[True, False])
+    filtered_df = filter_customers(df, segment, status)
+    return render_template(
+        "chien_dich_giu_chan.html",
+        customers=filtered_df.to_dict("records"),
+        campaign=get_retention_context(df),
+        segment_filter=segment,
+        status_filter=status,
+    )
+
+
+@app.route("/chien-dich-giu-chan/export")
+def export_chien_dich_giu_chan():
+    df = load_data()
+    segment = request.args.get("segment", "all")
+    status = request.args.get("status", "all")
+    filtered_df = filter_customers(df, segment, status)
+    return customers_csv_response(
+        filtered_df.to_dict("records"),
+        "chien-dich-giu-chan.csv",
+    )
+
+
+@app.route("/xuat-bao-cao/khach-nguy-co-cao.csv")
+def xuat_bao_cao_nguy_co_cao():
+    df = load_data()
+    high_risk = df[df["PhanKhuc"] == SEGMENT_HIGH] if not df.empty else df
+    return customers_csv_response(
+        high_risk.to_dict("records"),
+        "khach-nguy-co-cao.csv",
+    )
 
 
 @app.route("/phan-tich", methods=["GET", "POST"])
@@ -453,6 +693,9 @@ def chi_tiet_khach_hang(customer_code):
         customer=customer,
         history=recent_history(20, customer["MaHienThi"]),
         customer_code=customer_code,
+        default_subject=default_email_subject(customer),
+        default_content=default_email_content(customer),
+        email_status=request.args.get("email_status"),
     )
 
 
@@ -474,8 +717,7 @@ def care():
 
 @app.route("/care/send/<customer_code>", methods=["POST"])
 def send_care(customer_code):
-    save_care_action(customer_code)
-    return redirect(url_for("cham_soc"))
+    return redirect(url_for("chi_tiet_khach_hang", customer_code=customer_code))
 
 
 @app.route("/analyze", methods=["GET", "POST"])

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Chiến dịch giữ chân - {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+    <div>
+        <h2>Chiến dịch giữ chân</h2>
+        <p>Theo dõi danh sách khách hàng cần chăm sóc và xuất dữ liệu phục vụ chiến dịch CRM.</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('xuat_bao_cao_nguy_co_cao') }}">
+        <i class="bi bi-download"></i> Xuất khách nguy cơ cao
+    </a>
+</section>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="kpi-card tone-red"><div class="kpi-icon"><i class="bi bi-exclamation-triangle-fill"></i></div><div class="kpi-label">Nguy cơ cao</div><div class="kpi-value">{{ campaign.total_high }}</div><small class="kpi-note">Cần ưu tiên giữ chân</small></div></div>
+    <div class="col-md-3"><div class="kpi-card tone-green"><div class="kpi-icon"><i class="bi bi-check2-circle"></i></div><div class="kpi-label">Đã chăm sóc</div><div class="kpi-value">{{ campaign.cared }}</div><small class="kpi-note">Đã gửi thành công</small></div></div>
+    <div class="col-md-3"><div class="kpi-card tone-orange"><div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div><div class="kpi-label">Chưa chăm sóc</div><div class="kpi-value">{{ campaign.pending }}</div><small class="kpi-note">Cần xử lý tiếp</small></div></div>
+    <div class="col-md-3"><div class="kpi-card tone-blue"><div class="kpi-icon"><i class="bi bi-percent"></i></div><div class="kpi-label">Tỷ lệ đã xử lý</div><div class="kpi-value">{{ campaign.processed_rate }}%</div><small class="kpi-note">Theo trạng thái hiện tại</small></div></div>
+</div>
+
+<div class="modern-card mb-4"><div class="card-body">
+    <form class="row g-3 align-items-end" method="GET" action="{{ url_for('chien_dich_giu_chan') }}">
+        <div class="col-lg-4">
+            <label class="form-label">Phân khúc</label>
+            <select name="segment" class="form-select">
+                <option value="all" {% if segment_filter == "all" %}selected{% endif %}>Tất cả</option>
+                <option value="{{ SEGMENT_HIGH }}" {% if segment_filter == SEGMENT_HIGH %}selected{% endif %}>Nguy cơ cao</option>
+                <option value="{{ SEGMENT_MEDIUM }}" {% if segment_filter == SEGMENT_MEDIUM %}selected{% endif %}>Cần quan tâm</option>
+                <option value="{{ SEGMENT_SAFE }}" {% if segment_filter == SEGMENT_SAFE %}selected{% endif %}>An toàn</option>
+            </select>
+        </div>
+        <div class="col-lg-4">
+            <label class="form-label">Trạng thái</label>
+            <select name="status" class="form-select">
+                <option value="all" {% if status_filter == "all" %}selected{% endif %}>Tất cả</option>
+                <option value="{{ STATUS_PENDING }}" {% if status_filter == STATUS_PENDING %}selected{% endif %}>Chưa chăm sóc</option>
+                <option value="{{ STATUS_DONE }}" {% if status_filter == STATUS_DONE %}selected{% endif %}>Đã chăm sóc</option>
+            </select>
+        </div>
+        <div class="col-lg-2"><button class="btn btn-primary w-100" type="submit">Lọc</button></div>
+        <div class="col-lg-2">
+            <a class="btn btn-outline-primary w-100" href="{{ url_for('export_chien_dich_giu_chan', segment=segment_filter, status=status_filter) }}">
+                <i class="bi bi-download"></i> CSV
+            </a>
+        </div>
+    </form>
+</div></div>
+
+<div class="modern-card"><div class="card-body">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead><tr><th>Mã KH</th><th>LSTM</th><th>XGBoost</th><th>Ensemble</th><th>Phân khúc</th><th>Đề xuất CRM</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead>
+            <tbody>
+            {% for c in customers %}
+            <tr>
+                <td class="fw-bold">{{ c.MaHienThi }}</td>
+                <td>{{ "%.1f"|format(c.XacSuat_LSTM * 100) }}%</td>
+                <td>{{ "%.1f"|format(c.XacSuat_XGBoost * 100) }}%</td>
+                <td class="fw-bold">{{ "%.1f"|format(c.XacSuat_Ensemble * 100) }}%</td>
+                <td><span class="badge bg-{{ c.SegmentClass }} {% if c.SegmentClass == 'warning' %}text-dark{% endif %}">{{ c.PhanKhuc }}</span></td>
+                <td>{{ c.ChamSoc }}</td>
+                <td><span class="badge {% if c.TrangThaiChamSoc == STATUS_DONE %}bg-success{% else %}bg-secondary{% endif %}">{{ c.TrangThaiChamSoc }}</span></td>
+                <td><a class="btn btn-outline-primary btn-sm" href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">Xem</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-center text-muted">Không có khách hàng phù hợp bộ lọc.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div></div>
+{% endblock %}

@@ -36,10 +36,7 @@
                     {% if c.TrangThaiChamSoc == STATUS_DONE %}
                     <button class="btn btn-success btn-sm" disabled>Đã chăm sóc</button>
                     {% else %}
-                    <form method="POST" action="{{ url_for('gui_cham_soc', customer_code=c.MaHienThi) }}">
-                        <input type="hidden" name="next" value="{{ url_for('cham_soc') }}">
-                        <button class="btn btn-primary btn-sm" type="submit">Gửi chăm sóc</button>
-                    </form>
+                    <a class="btn btn-primary btn-sm" href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">Soạn email</a>
                     {% endif %}
                 </td>
             </tr>
@@ -55,12 +52,21 @@
     <h5 class="section-title">Lịch sử chăm sóc gần đây</h5>
     <div class="table-responsive">
         <table class="table table-hover align-middle">
-            <thead><tr><th>Mã KH</th><th>Phân khúc</th><th>Hành động</th><th>Trạng thái</th><th>Thời gian</th></tr></thead>
+            <thead><tr><th>Mã KH</th><th>Phân khúc</th><th>Email</th><th>Tiêu đề</th><th>Trạng thái</th><th>Thời gian</th></tr></thead>
             <tbody>
             {% for h in history %}
-            <tr><td class="fw-bold">{{ h.customer_code }}</td><td>{{ h.segment }}</td><td>{{ h.action }}</td><td>{{ h.status }}</td><td>{{ h.updated_at }}</td></tr>
+            <tr>
+                <td class="fw-bold">{{ h.customer_code }}</td>
+                <td>{{ h.segment }}</td>
+                <td>{{ h.recipient_email or "Chưa có" }}</td>
+                <td>{{ h.email_subject or h.action }}</td>
+                <td>
+                    <span class="badge {% if h.status == STATUS_DONE %}bg-success{% elif h.status == STATUS_FAILED %}bg-danger{% else %}bg-secondary{% endif %}">{{ h.status }}</span>
+                </td>
+                <td>{{ h.updated_at }}</td>
+            </tr>
             {% else %}
-            <tr><td colspan="5" class="text-center text-muted">Chưa có lịch sử chăm sóc.</td></tr>
+            <tr><td colspan="6" class="text-center text-muted">Chưa có lịch sử chăm sóc.</td></tr>
             {% endfor %}
             </tbody>
         </table>

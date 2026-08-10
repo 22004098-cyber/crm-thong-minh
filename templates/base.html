@@ -37,6 +37,9 @@
             <a class="sidebar-link {% if request.endpoint == 'cham_soc' %}active{% endif %}" href="{{ url_for('cham_soc') }}">
                 <i class="bi bi-chat-dots-fill"></i><span>Chăm sóc khách hàng</span>
             </a>
+            <a class="sidebar-link {% if request.endpoint in ['chien_dich_giu_chan', 'export_chien_dich_giu_chan'] %}active{% endif %}" href="{{ url_for('chien_dich_giu_chan') }}">
+                <i class="bi bi-bullseye"></i><span>Chiến dịch giữ chân</span>
+            </a>
             <a class="sidebar-link {% if request.endpoint == 'danh_gia_mo_hinh' %}active{% endif %}" href="{{ url_for('danh_gia_mo_hinh') }}">
                 <i class="bi bi-bar-chart-line-fill"></i><span>Đánh giá mô hình</span>
             </a>
@@ -90,6 +93,7 @@
             <a class="sidebar-link {% if request.endpoint == 'phan_khuc' %}active{% endif %}" href="{{ url_for('phan_khuc') }}"><i class="bi bi-diagram-3-fill"></i><span>Phân khúc khách hàng</span></a>
             <a class="sidebar-link {% if request.endpoint == 'phan_tich' %}active{% endif %}" href="{{ url_for('phan_tich') }}"><i class="bi bi-search-heart"></i><span>Phân tích khách hàng</span></a>
             <a class="sidebar-link {% if request.endpoint == 'cham_soc' %}active{% endif %}" href="{{ url_for('cham_soc') }}"><i class="bi bi-chat-dots-fill"></i><span>Chăm sóc khách hàng</span></a>
+            <a class="sidebar-link {% if request.endpoint in ['chien_dich_giu_chan', 'export_chien_dich_giu_chan'] %}active{% endif %}" href="{{ url_for('chien_dich_giu_chan') }}"><i class="bi bi-bullseye"></i><span>Chiến dịch giữ chân</span></a>
             <a class="sidebar-link {% if request.endpoint == 'danh_gia_mo_hinh' %}active{% endif %}" href="{{ url_for('danh_gia_mo_hinh') }}"><i class="bi bi-bar-chart-line-fill"></i><span>Đánh giá mô hình</span></a>
         </nav>
     </div>
