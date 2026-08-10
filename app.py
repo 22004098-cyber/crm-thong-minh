@@ -1,14 +1,15 @@
 import csv
 import io
-import json
+import logging
 import os
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 import pandas as pd
+import resend
+from resend.exceptions import ResendError
 from flask import Flask, Response, redirect, render_template, request, url_for
 from sklearn.metrics import (
     accuracy_score,
@@ -20,6 +21,7 @@ from sklearn.metrics import (
 
 
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "data" / "customer_churn_test_report.csv"
@@ -35,9 +37,11 @@ SEGMENT_HIGH = "Nguy cơ cao"
 SEGMENT_MEDIUM = "Cần quan tâm"
 SEGMENT_SAFE = "An toàn"
 STATUS_PENDING = "Chưa chăm sóc"
-STATUS_DONE = "Đã chăm sóc"
+STATUS_DONE = "Đã gửi"
+EMAIL_STATUS_DONE = "Đã gửi Email"
+LEGACY_STATUS_DONE = "Đã chăm sóc"
 STATUS_FAILED = "Gửi lỗi"
-RESEND_API_URL = "https://api.resend.com/emails"
+DONE_STATUSES = (STATUS_DONE, EMAIL_STATUS_DONE, LEGACY_STATUS_DONE)
 
 
 def init_db():
@@ -65,6 +69,9 @@ def init_db():
             "recipient_email": "TEXT",
             "email_subject": "TEXT",
             "email_content": "TEXT",
+            "subject": "TEXT",
+            "message": "TEXT",
+            "sent_at": "TEXT",
             "provider_message_id": "TEXT",
             "error_message": "TEXT",
         }
@@ -115,14 +122,15 @@ def badge_class(segment):
 
 
 def load_care_status_map():
+    placeholders = ", ".join("?" for _ in DONE_STATUSES)
     rows = get_db_rows(
         """
         SELECT customer_code
         FROM care_history
-        WHERE status = ?
+        WHERE status IN ({})
         GROUP BY customer_code
-        """,
-        (STATUS_DONE,),
+        """.format(placeholders),
+        DONE_STATUSES,
     )
     return {row["customer_code"]: STATUS_DONE for row in rows}
 
@@ -232,7 +240,7 @@ def recent_history(limit=20, customer_code=None):
             """
             SELECT customer_code, segment, action, status, created_at, updated_at,
                    recipient_email, email_subject, email_content,
-                   provider_message_id, error_message
+                   subject, message, sent_at, provider_message_id, error_message
             FROM care_history
             WHERE customer_code = ?
             ORDER BY updated_at DESC, id DESC
@@ -244,7 +252,7 @@ def recent_history(limit=20, customer_code=None):
         """
         SELECT customer_code, segment, action, status, created_at, updated_at,
                recipient_email, email_subject, email_content,
-               provider_message_id, error_message
+               subject, message, sent_at, provider_message_id, error_message
         FROM care_history
         ORDER BY updated_at DESC, id DESC
         LIMIT ?
@@ -282,6 +290,7 @@ def save_care_action(
                 UPDATE care_history
                 SET segment = ?, action = ?, status = ?, updated_at = ?,
                     recipient_email = ?, email_subject = ?, email_content = ?,
+                    subject = ?, message = ?, sent_at = ?,
                     provider_message_id = ?, error_message = ?
                 WHERE id = ?
                 """,
@@ -293,6 +302,9 @@ def save_care_action(
                     recipient_email,
                     email_subject,
                     email_content,
+                    email_subject,
+                    email_content,
+                    now if status == STATUS_DONE else None,
                     provider_message_id,
                     error_message,
                     existing[0]["id"],
@@ -304,8 +316,9 @@ def save_care_action(
                 INSERT INTO care_history
                     (customer_code, segment, action, status, created_at, updated_at,
                      recipient_email, email_subject, email_content,
+                     subject, message, sent_at,
                      provider_message_id, error_message)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     customer["MaHienThi"],
@@ -317,6 +330,9 @@ def save_care_action(
                     recipient_email,
                     email_subject,
                     email_content,
+                    email_subject,
+                    email_content,
+                    now if status == STATUS_DONE else None,
                     provider_message_id,
                     error_message,
                 ),
@@ -325,51 +341,179 @@ def save_care_action(
 
 
 def default_email_subject(customer):
-    return f"CRM Thông Minh - Đề xuất chăm sóc khách hàng {customer['MaHienThi']}"
+    segment = customer["PhanKhuc"]
+    if segment == SEGMENT_HIGH:
+        return "Ưu đãi giữ chân khách hàng - Voucher 20%"
+    if segment == SEGMENT_MEDIUM:
+        return "Ưu đãi cá nhân hóa dành riêng cho quý khách"
+    return "Cảm ơn quý khách đã đồng hành cùng chúng tôi"
 
 
 def default_email_content(customer):
+    segment = customer["PhanKhuc"]
+    if segment == SEGMENT_HIGH:
+        body = (
+            "Cảm ơn quý khách đã tin tưởng và sử dụng dịch vụ của chúng tôi. "
+            "Để tri ân và tiếp tục đồng hành cùng quý khách, chúng tôi gửi tặng "
+            "voucher ưu đãi 20% cho lần sử dụng tiếp theo. Rất mong quý khách "
+            "tiếp tục trải nghiệm dịch vụ trong thời gian tới."
+        )
+    elif segment == SEGMENT_MEDIUM:
+        body = (
+            "Chúng tôi gửi đến quý khách một ưu đãi cá nhân hóa cùng các gợi ý "
+            "sản phẩm/dịch vụ phù hợp với nhu cầu hiện tại. Hy vọng những đề xuất "
+            "này giúp quý khách có trải nghiệm tốt hơn."
+        )
+    else:
+        body = (
+            "Cảm ơn quý khách đã luôn đồng hành cùng chúng tôi. Quý khách sẽ tiếp tục "
+            "được tích điểm và nhận các hoạt động chăm sóc định kỳ từ hệ thống CRM."
+        )
     return (
         f"Xin chào khách hàng {customer['MaHienThi']},\n\n"
-        "CRM Thông Minh ghi nhận quý khách thuộc nhóm cần được chăm sóc phù hợp. "
-        f"Đề xuất hiện tại: {customer['ChamSoc']}.\n\n"
-        "Nhân viên phụ trách sẽ liên hệ và hỗ trợ quý khách trong thời gian sớm nhất.\n\n"
+        f"{body}\n\n"
+        f"Đề xuất CRM: {customer['ChamSoc']}.\n\n"
         "Trân trọng,\nCRM Thông Minh"
     )
 
 
-def send_resend_email(recipient_email, subject, content):
+def is_valid_email(email):
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email or ""))
+
+
+def is_email_config_ready():
+    return bool(os.environ.get("RESEND_API_KEY") and os.environ.get("RESEND_FROM_EMAIL"))
+
+
+def log_email_config_error(message):
+    app.logger.error("[EMAIL CONFIG ERROR] %s", message)
+
+
+def log_email_error(
+    customer_code,
+    recipient_email,
+    from_email,
+    http_status,
+    error_type,
+    error_message,
+):
+    app.logger.error(
+        "\n".join(
+            [
+                "[EMAIL ERROR]",
+                f"Customer: {customer_code}",
+                f"Recipient: {recipient_email or 'N/A'}",
+                f"From: {from_email or 'N/A'}",
+                f"HTTP status: {http_status or 'N/A'}",
+                f"Error type: {error_type or 'N/A'}",
+                f"Error message: {error_message or 'N/A'}",
+            ]
+        )
+    )
+
+
+def log_email_success(customer_code, recipient_email, email_id):
+    app.logger.info(
+        "\n".join(
+            [
+                "[EMAIL SUCCESS]",
+                f"Customer: {customer_code}",
+                f"Recipient: {recipient_email}",
+                f"Email ID: {email_id or 'N/A'}",
+            ]
+        )
+    )
+
+
+def get_resend_response_id(email):
+    if isinstance(email, dict):
+        return email.get("id")
+    return getattr(email, "id", None)
+
+
+def send_resend_email(customer_code, recipient_email, subject, content):
     api_key = os.environ.get("RESEND_API_KEY")
     from_email = os.environ.get("RESEND_FROM_EMAIL")
-    if not api_key or not from_email:
-        return False, None, "Thiếu RESEND_API_KEY hoặc RESEND_FROM_EMAIL."
+    if not api_key:
+        error_message = "Missing RESEND_API_KEY"
+        log_email_config_error(error_message)
+        log_email_error(
+            customer_code,
+            recipient_email,
+            from_email,
+            None,
+            "EmailConfigError",
+            error_message,
+        )
+        return False, None, "Cấu hình email chưa sẵn sàng. Thiếu RESEND_API_KEY."
+    if not from_email:
+        error_message = "Missing RESEND_FROM_EMAIL"
+        log_email_config_error(error_message)
+        log_email_error(
+            customer_code,
+            recipient_email,
+            from_email,
+            None,
+            "EmailConfigError",
+            error_message,
+        )
+        return False, None, "Cấu hình email chưa sẵn sàng. Thiếu RESEND_FROM_EMAIL."
+    if not is_valid_email(recipient_email):
+        error_message = "Email người nhận không hợp lệ."
+        log_email_error(
+            customer_code,
+            recipient_email,
+            from_email,
+            None,
+            "EmailValidationError",
+            error_message,
+        )
+        return False, None, error_message
 
-    payload = {
-        "from": from_email,
-        "to": [recipient_email],
-        "subject": subject,
-        "text": content,
-    }
-    request_payload = json.dumps(payload).encode("utf-8")
-    req = Request(
-        RESEND_API_URL,
-        data=request_payload,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    resend.api_key = api_key
     try:
-        with urlopen(req, timeout=20) as response:
-            response_body = response.read().decode("utf-8")
-            data = json.loads(response_body) if response_body else {}
-            return True, data.get("id"), None
-    except HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        return False, None, f"Resend HTTP {exc.code}: {body}"
-    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-        return False, None, str(exc)
+        email = resend.Emails.send(
+            {
+                "from": from_email,
+                "to": [recipient_email],
+                "subject": subject,
+                "html": content.replace("\n", "<br>"),
+            }
+        )
+        email_id = get_resend_response_id(email)
+        log_email_success(customer_code, recipient_email, email_id)
+        return True, email_id, None
+    except ResendError as exc:
+        http_status = getattr(exc, "code", None)
+        error_type = getattr(exc, "error_type", exc.__class__.__name__)
+        error_message = getattr(exc, "message", str(exc))
+        log_email_error(
+            customer_code,
+            recipient_email,
+            from_email,
+            http_status,
+            error_type,
+            error_message,
+        )
+        return False, None, error_message
+    except Exception as exc:
+        response = getattr(exc, "response", None)
+        http_status = getattr(response, "status_code", None)
+        error_message = str(exc)
+        if response is not None:
+            try:
+                error_message = response.text or error_message
+            except Exception:
+                pass
+        log_email_error(
+            customer_code,
+            recipient_email,
+            from_email,
+            http_status,
+            exc.__class__.__name__,
+            error_message,
+        )
+        return False, None, error_message
 
 
 def filter_customers(df, segment=None, status=None):
@@ -529,6 +673,7 @@ def cham_soc():
         not_cared=not_cared,
         cared=cared,
         high_pending=high_pending,
+        email_config_ready=is_email_config_ready(),
     )
 
 
@@ -543,18 +688,27 @@ def gui_cham_soc(customer_code):
     email_subject = (request.form.get("email_subject") or "").strip()
     email_content = (request.form.get("email_content") or "").strip()
     if not recipient_email or not email_subject or not email_content:
+        error_message = "Thiếu email người nhận, tiêu đề hoặc nội dung."
+        log_email_error(
+            customer["MaHienThi"],
+            recipient_email,
+            os.environ.get("RESEND_FROM_EMAIL"),
+            None,
+            "EmailValidationError",
+            error_message,
+        )
         save_care_action(
             customer_code,
             recipient_email=recipient_email,
             email_subject=email_subject,
             email_content=email_content,
             status=STATUS_FAILED,
-            error_message="Thiếu email người nhận, tiêu đề hoặc nội dung.",
+            error_message=error_message,
         )
         return redirect(f"{next_url}?email_status=error")
 
     success, provider_message_id, error_message = send_resend_email(
-        recipient_email, email_subject, email_content
+        customer["MaHienThi"], recipient_email, email_subject, email_content
     )
     if success:
         save_care_action(
@@ -696,6 +850,7 @@ def chi_tiet_khach_hang(customer_code):
         default_subject=default_email_subject(customer),
         default_content=default_email_content(customer),
         email_status=request.args.get("email_status"),
+        email_config_ready=is_email_config_ready(),
     )
 
 

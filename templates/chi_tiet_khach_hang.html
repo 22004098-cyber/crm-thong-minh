@@ -11,6 +11,9 @@
 {% elif email_status == "error" %}
 <div class="alert alert-danger rounded-4">Chưa gửi được email chăm sóc. Hệ thống đã lưu trạng thái lỗi, vui lòng kiểm tra cấu hình Resend hoặc nội dung email.</div>
 {% endif %}
+{% if not email_config_ready %}
+<div class="alert alert-warning rounded-4">Cấu hình email chưa sẵn sàng. Cần thêm RESEND_API_KEY và RESEND_FROM_EMAIL trước khi gửi email thật.</div>
+{% endif %}
 <section class="profile-hero mb-4">
     <div>
         <p class="mb-1">Hồ sơ khách hàng</p>
@@ -50,9 +53,9 @@
     <div class="col-lg-4">
         <div class="modern-card h-100"><div class="card-body">
             <h5 class="section-title">Email chăm sóc</h5>
-            <p class="text-muted">Nhân viên kiểm tra nội dung trước khi gửi. Trạng thái chỉ chuyển thành đã chăm sóc khi Resend gửi thành công.</p>
+            <p class="text-muted">Nhân viên kiểm tra người nhận, tiêu đề và nội dung trước khi gửi. Trạng thái chỉ chuyển thành Đã gửi Email khi Resend gửi thành công.</p>
             {% if customer.TrangThaiChamSoc == STATUS_DONE %}
-            <button class="btn btn-success w-100" disabled>Đã chăm sóc</button>
+            <button class="btn btn-success w-100" disabled>Đã gửi Email</button>
             {% else %}
             <form method="POST" action="{{ url_for('gui_cham_soc', customer_code=customer.MaHienThi) }}">
                 <input type="hidden" name="next" value="{{ url_for('chi_tiet_khach_hang', customer_code=customer.MaHienThi) }}">
@@ -86,11 +89,11 @@
                 <td class="fw-bold">{{ h.customer_code }}</td>
                 <td>{{ h.segment }}</td>
                 <td>{{ h.recipient_email or "Chưa có" }}</td>
-                <td>{{ h.email_subject or h.action }}</td>
+                <td>{{ h.subject or h.email_subject or h.action }}</td>
                 <td>
                     <span class="badge {% if h.status == STATUS_DONE %}bg-success{% elif h.status == STATUS_FAILED %}bg-danger{% else %}bg-secondary{% endif %}">{{ h.status }}</span>
                 </td>
-                <td>{{ h.updated_at }}</td>
+                <td>{{ h.sent_at or h.updated_at }}</td>
             </tr>
             {% else %}
             <tr><td colspan="6" class="text-center text-muted">Khách hàng này chưa có lịch sử chăm sóc.</td></tr>

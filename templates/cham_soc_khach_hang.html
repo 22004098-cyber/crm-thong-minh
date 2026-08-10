@@ -4,6 +4,12 @@
 {% block content %}
 <section class="page-heading"><div><h2>Chăm sóc khách hàng</h2><p>Quản lý trạng thái chăm sóc, ưu tiên khách hàng nguy cơ cao và lưu lịch sử vào SQLite.</p></div></section>
 
+{% if not email_config_ready %}
+<div class="alert alert-warning rounded-4">
+    Cấu hình email chưa sẵn sàng. Vui lòng thêm RESEND_API_KEY và RESEND_FROM_EMAIL trên Render trước khi gửi email thật.
+</div>
+{% endif %}
+
 <div class="row g-3 mb-4">
     <div class="col-md-4"><div class="kpi-card tone-orange"><div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div><div class="kpi-label">Chưa chăm sóc</div><div class="kpi-value">{{ not_cared }}</div><small class="kpi-note">Cần xử lý tiếp</small></div></div>
     <div class="col-md-4"><div class="kpi-card tone-green"><div class="kpi-icon"><i class="bi bi-check2-circle"></i></div><div class="kpi-label">Đã chăm sóc</div><div class="kpi-value">{{ cared }}</div><small class="kpi-note">Đã lưu lịch sử</small></div></div>
@@ -36,7 +42,7 @@
                     {% if c.TrangThaiChamSoc == STATUS_DONE %}
                     <button class="btn btn-success btn-sm" disabled>Đã chăm sóc</button>
                     {% else %}
-                    <a class="btn btn-primary btn-sm" href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">Soạn email</a>
+                    <a class="btn btn-primary btn-sm" href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">Xem nội dung & gửi Email</a>
                     {% endif %}
                 </td>
             </tr>
@@ -59,11 +65,11 @@
                 <td class="fw-bold">{{ h.customer_code }}</td>
                 <td>{{ h.segment }}</td>
                 <td>{{ h.recipient_email or "Chưa có" }}</td>
-                <td>{{ h.email_subject or h.action }}</td>
+                <td>{{ h.subject or h.email_subject or h.action }}</td>
                 <td>
                     <span class="badge {% if h.status == STATUS_DONE %}bg-success{% elif h.status == STATUS_FAILED %}bg-danger{% else %}bg-secondary{% endif %}">{{ h.status }}</span>
                 </td>
-                <td>{{ h.updated_at }}</td>
+                <td>{{ h.sent_at or h.updated_at }}</td>
             </tr>
             {% else %}
             <tr><td colspan="6" class="text-center text-muted">Chưa có lịch sử chăm sóc.</td></tr>
