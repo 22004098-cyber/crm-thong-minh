@@ -1,0 +1,23 @@
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+.vscode/
+.idea/
+
+.env
+.venv/
+env/
+
+*.log
+*.tmp
+*.bak
+backup_before_refactor_*.zip
+
+.chrome_qa/
+.chrome_qa2/
+
+# SQLite is created at runtime. Keep it local unless a persistent disk is configured.
+crm.db
+crm.db-journal

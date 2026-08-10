@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Chi tiết khách hàng - {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+{% if not customer %}
+<div class="alert alert-danger rounded-4">Không tìm thấy khách hàng {{ customer_code }}.</div>
+<a href="{{ url_for('phan_tich') }}" class="btn btn-primary">Quay lại phân tích</a>
+{% else %}
+<section class="profile-hero mb-4">
+    <div>
+        <p class="mb-1">Hồ sơ khách hàng</p>
+        <h2>{{ customer.MaHienThi }}</h2>
+    </div>
+    <span class="badge bg-{{ customer.SegmentClass }} {% if customer.SegmentClass == 'warning' %}text-dark{% endif %} fs-6">{{ customer.PhanKhuc }}</span>
+</section>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="modern-card"><div class="card-body">
+            <h5 class="section-title">Kết quả mô hình</h5>
+            <div class="row g-3 mt-1">
+                <div class="col-md-4"><div class="analysis-box"><small>LSTM</small><h3 class="text-primary">{{ "%.1f"|format(customer.XacSuat_LSTM * 100) }}%</h3></div></div>
+                <div class="col-md-4"><div class="analysis-box"><small>XGBoost</small><h3 class="text-warning">{{ "%.1f"|format(customer.XacSuat_XGBoost * 100) }}%</h3></div></div>
+                <div class="col-md-4"><div class="analysis-box"><small>Mô hình kết hợp</small><h3 class="text-ensemble">{{ "%.1f"|format(customer.XacSuat_Ensemble * 100) }}%</h3></div></div>
+            </div>
+            <hr>
+            <div class="row g-3">
+                <div class="col-md-6"><strong>Xác suất rời bỏ:</strong> {{ "%.1f"|format(customer.XacSuat_Ensemble * 100) }}%</div>
+                <div class="col-md-6"><strong>Trạng thái thực tế:</strong> {% if customer.ThucTe_RoiBo == 1 %}Đã rời bỏ{% else %}Không rời bỏ{% endif %}</div>
+                <div class="col-md-6"><strong>Dự đoán Ensemble:</strong> {% if customer.DuDoan_Ensemble == 1 %}Khách hàng rời bỏ{% else %}Không rời bỏ{% endif %}</div>
+                <div class="col-md-6"><strong>Trạng thái chăm sóc:</strong> {{ customer.TrangThaiChamSoc }}</div>
+            </div>
+            <div class="alert alert-info rounded-4 mt-3 mb-0"><strong>Đề xuất CRM:</strong><br>{{ customer.ChamSoc }}</div>
+        </div></div>
+    </div>
+    <div class="col-lg-4">
+        <div class="modern-card h-100"><div class="card-body">
+            <h5 class="section-title">Thao tác chăm sóc</h5>
+            <p class="text-muted">Gửi chăm sóc sẽ cập nhật SQLite và lưu lịch sử cho khách hàng này.</p>
+            {% if customer.TrangThaiChamSoc == STATUS_DONE %}
+            <button class="btn btn-success w-100" disabled>Đã chăm sóc</button>
+            {% else %}
+            <form method="POST" action="{{ url_for('gui_cham_soc', customer_code=customer.MaHienThi) }}">
+                <input type="hidden" name="next" value="{{ url_for('chi_tiet_khach_hang', customer_code=customer.MaHienThi) }}">
+                <button type="submit" class="btn btn-primary w-100">Gửi chăm sóc</button>
+            </form>
+            {% endif %}
+        </div></div>
+    </div>
+</div>
+
+<div class="modern-card mt-4"><div class="card-body">
+    <h5 class="section-title">Lịch sử chăm sóc</h5>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead><tr><th>Mã KH</th><th>Phân khúc</th><th>Hành động</th><th>Trạng thái</th><th>Thời gian</th></tr></thead>
+            <tbody>
+            {% for h in history %}
+            <tr><td class="fw-bold">{{ h.customer_code }}</td><td>{{ h.segment }}</td><td>{{ h.action }}</td><td>{{ h.status }}</td><td>{{ h.updated_at }}</td></tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center text-muted">Khách hàng này chưa có lịch sử chăm sóc.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div></div>
+{% endif %}
+{% endblock %}

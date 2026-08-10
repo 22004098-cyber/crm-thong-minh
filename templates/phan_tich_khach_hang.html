@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Phân tích khách hàng - {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+    <div><h2>Phân tích khách hàng</h2><p>Nhập hoặc chọn mã khách hàng để hệ thống tự lấy kết quả LSTM, XGBoost, mô hình kết hợp và đề xuất chăm sóc.</p></div>
+</section>
+
+{% if error %}<div class="alert alert-danger rounded-4">{{ error }}</div>{% endif %}
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="modern-card mb-4"><div class="card-body">
+            <h5 class="section-title">Tra cứu khách hàng trong CSV</h5>
+            <form method="POST">
+                <input type="hidden" name="mode" value="lookup">
+                <label class="form-label">Mã khách hàng</label>
+                <div class="input-group mb-3">
+                    <input list="customerList" type="text" name="ma_khach_hang" class="form-control" placeholder="Ví dụ: KH001" required>
+                    <button class="btn btn-primary" type="submit">Phân tích</button>
+                </div>
+                <datalist id="customerList">
+                    {% for c in customers %}
+                    <option value="{{ c.MaHienThi }}">{{ c.PhanKhuc }}</option>
+                    {% endfor %}
+                </datalist>
+            </form>
+        </div></div>
+
+        <div class="modern-card"><div class="card-body">
+            <h5 class="section-title">Phân tích thủ công</h5>
+            <p class="text-muted">Dùng khi cần demo khách hàng chưa có trong CSV.</p>
+            <form method="POST">
+                <input type="hidden" name="mode" value="manual">
+                <input type="text" name="manual_code" class="form-control mb-3" placeholder="Tên/mã ghi chú">
+                <input type="number" name="lstm" class="form-control mb-3" step="0.01" min="0" max="100" placeholder="Xác suất LSTM, ví dụ 80" required>
+                <input type="number" name="xgboost" class="form-control mb-3" step="0.01" min="0" max="100" placeholder="Xác suất XGBoost, ví dụ 70" required>
+                <button class="btn btn-outline-primary w-100" type="submit">Phân tích thủ công</button>
+            </form>
+        </div></div>
+    </div>
+
+    <div class="col-lg-7">
+        {% set item = result or manual_result %}
+        {% if item %}
+        <div class="modern-card"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                <div><h5 class="section-title mb-1">Kết quả phân tích</h5><p class="text-muted mb-0">Mã khách hàng: <strong>{{ item.MaHienThi }}</strong></p></div>
+                <span class="badge bg-{{ item.SegmentClass }} {% if item.SegmentClass == 'warning' %}text-dark{% endif %} fs-6">{{ item.PhanKhuc }}</span>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-4"><div class="analysis-box"><small>LSTM</small><h3 class="text-primary">{{ "%.1f"|format(item.XacSuat_LSTM * 100) }}%</h3></div></div>
+                <div class="col-md-4"><div class="analysis-box"><small>XGBoost</small><h3 class="text-warning">{{ "%.1f"|format(item.XacSuat_XGBoost * 100) }}%</h3></div></div>
+                <div class="col-md-4"><div class="analysis-box"><small>Mô hình kết hợp</small><h3 class="text-ensemble">{{ "%.1f"|format(item.XacSuat_Ensemble * 100) }}%</h3></div></div>
+            </div>
+            <hr>
+            <p><strong>Kết quả dự đoán:</strong> {% if item.DuDoan_Ensemble == 1 %}Có nguy cơ khách hàng rời bỏ{% else %}Không có nguy cơ rời bỏ{% endif %}</p>
+            {% if item.ThucTe_RoiBo is not none %}<p><strong>Trạng thái thực tế:</strong> {% if item.ThucTe_RoiBo == 1 %}Đã rời bỏ{% else %}Không rời bỏ{% endif %}</p>{% endif %}
+            <p><strong>Trạng thái chăm sóc:</strong> {{ item.TrangThaiChamSoc }}</p>
+            <div class="alert alert-info rounded-4"><strong>Đề xuất chăm sóc:</strong><br>{{ item.ChamSoc }}</div>
+            {% if result %}<a class="btn btn-primary" href="{{ url_for('chi_tiet_khach_hang', customer_code=item.MaHienThi) }}">Xem hồ sơ khách hàng</a>{% endif %}
+        </div></div>
+        {% else %}
+        <div class="modern-card"><div class="card-body text-center py-5">
+            <i class="bi bi-search-heart display-4 text-primary"></i>
+            <h4 class="mt-3">Sẵn sàng phân tích</h4>
+            <p class="text-muted mb-0">Nhập KH001 hoặc chọn một khách hàng để xem kết quả dự đoán và đề xuất chăm sóc.</p>
+        </div></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

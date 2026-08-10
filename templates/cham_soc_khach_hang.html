@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Chăm sóc khách hàng - {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-heading"><div><h2>Chăm sóc khách hàng</h2><p>Quản lý trạng thái chăm sóc, ưu tiên khách hàng nguy cơ cao và lưu lịch sử vào SQLite.</p></div></section>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4"><div class="kpi-card tone-orange"><div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div><div class="kpi-label">Chưa chăm sóc</div><div class="kpi-value">{{ not_cared }}</div><small class="kpi-note">Cần xử lý tiếp</small></div></div>
+    <div class="col-md-4"><div class="kpi-card tone-green"><div class="kpi-icon"><i class="bi bi-check2-circle"></i></div><div class="kpi-label">Đã chăm sóc</div><div class="kpi-value">{{ cared }}</div><small class="kpi-note">Đã lưu lịch sử</small></div></div>
+    <div class="col-md-4"><div class="kpi-card tone-red"><div class="kpi-icon"><i class="bi bi-exclamation-triangle-fill"></i></div><div class="kpi-label">Nguy cơ cao cần xử lý</div><div class="kpi-value">{{ high_pending }}</div><small class="kpi-note">Ưu tiên giữ chân</small></div></div>
+</div>
+
+<div class="modern-card mb-4"><div class="card-body">
+    <div class="row g-3">
+        <div class="col-lg-4"><input type="text" id="searchCare" class="form-control" placeholder="Tìm mã khách hàng"></div>
+        <div class="col-lg-3"><select id="segmentFilter" class="form-select"><option value="all">Tất cả phân khúc</option><option value="{{ SEGMENT_HIGH }}">Nguy cơ cao</option><option value="{{ SEGMENT_MEDIUM }}">Cần quan tâm</option><option value="{{ SEGMENT_SAFE }}">An toàn</option></select></div>
+        <div class="col-lg-3"><select id="statusFilter" class="form-select"><option value="all">Tất cả trạng thái</option><option value="{{ STATUS_PENDING }}">Chưa chăm sóc</option><option value="{{ STATUS_DONE }}">Đã chăm sóc</option></select></div>
+        <div class="col-lg-2"><button type="button" id="resetCare" class="btn btn-outline-secondary w-100">Đặt lại</button></div>
+    </div>
+</div></div>
+
+<div class="modern-card"><div class="card-body">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead><tr><th>STT</th><th>Mã KH</th><th>Nguy cơ</th><th>Phân khúc</th><th>Đề xuất</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+            <tbody>
+            {% for c in customers %}
+            <tr class="care-row" data-customer="{{ c.MaHienThi }}" data-segment="{{ c.PhanKhuc }}" data-status="{{ c.TrangThaiChamSoc }}">
+                <td>{{ loop.index }}</td>
+                <td class="fw-bold"><a href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">{{ c.MaHienThi }}</a></td>
+                <td class="fw-bold">{{ "%.1f"|format(c.XacSuat_Ensemble * 100) }}%</td>
+                <td><span class="badge bg-{{ c.SegmentClass }} {% if c.SegmentClass == 'warning' %}text-dark{% endif %}">{{ c.PhanKhuc }}</span></td>
+                <td>{{ c.ChamSoc }}</td>
+                <td><span class="badge {% if c.TrangThaiChamSoc == STATUS_DONE %}bg-success{% else %}bg-secondary{% endif %}">{{ c.TrangThaiChamSoc }}</span></td>
+                <td>
+                    {% if c.TrangThaiChamSoc == STATUS_DONE %}
+                    <button class="btn btn-success btn-sm" disabled>Đã chăm sóc</button>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('gui_cham_soc', customer_code=c.MaHienThi) }}">
+                        <input type="hidden" name="next" value="{{ url_for('cham_soc') }}">
+                        <button class="btn btn-primary btn-sm" type="submit">Gửi chăm sóc</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-muted">Chưa có dữ liệu hợp lệ.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div></div>
+
+<div class="modern-card mt-4"><div class="card-body">
+    <h5 class="section-title">Lịch sử chăm sóc gần đây</h5>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead><tr><th>Mã KH</th><th>Phân khúc</th><th>Hành động</th><th>Trạng thái</th><th>Thời gian</th></tr></thead>
+            <tbody>
+            {% for h in history %}
+            <tr><td class="fw-bold">{{ h.customer_code }}</td><td>{{ h.segment }}</td><td>{{ h.action }}</td><td>{{ h.status }}</td><td>{{ h.updated_at }}</td></tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center text-muted">Chưa có lịch sử chăm sóc.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const searchCare = document.getElementById("searchCare");
+const segmentFilter = document.getElementById("segmentFilter");
+const statusFilter = document.getElementById("statusFilter");
+const careRows = document.querySelectorAll(".care-row");
+function filterCare() {
+    const keyword = searchCare.value.trim().toLowerCase();
+    const segment = segmentFilter.value;
+    const status = statusFilter.value;
+    careRows.forEach((row) => {
+        const okSearch = row.dataset.customer.toLowerCase().includes(keyword);
+        const okSegment = segment === "all" || row.dataset.segment === segment;
+        const okStatus = status === "all" || row.dataset.status === status;
+        row.style.display = okSearch && okSegment && okStatus ? "" : "none";
+    });
+}
+[searchCare, segmentFilter, statusFilter].forEach((el) => el.addEventListener("input", filterCare));
+document.getElementById("resetCare").addEventListener("click", () => { searchCare.value = ""; segmentFilter.value = "all"; statusFilter.value = "all"; filterCare(); });
+</script>
+{% endblock %}

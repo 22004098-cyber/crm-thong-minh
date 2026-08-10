@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Phân khúc khách hàng - {{ APP_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-heading"><div><h2>Phân khúc khách hàng</h2><p>Phân nhóm khách hàng dựa trên xác suất mô hình kết hợp (Ensemble).</p></div></section>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4"><div class="segment-card danger"><span>NGUY CƠ CAO</span><h3>{{ high }}</h3><p>&gt;= 60%</p></div></div>
+    <div class="col-md-4"><div class="segment-card warning"><span>CẦN QUAN TÂM</span><h3>{{ medium }}</h3><p>30% - &lt;60%</p></div></div>
+    <div class="col-md-4"><div class="segment-card success"><span>AN TOÀN</span><h3>{{ safe }}</h3><p>&lt;30%</p></div></div>
+</div>
+
+<div class="modern-card mb-4"><div class="card-body">
+    <div class="row g-3">
+        <div class="col-md-6"><input type="text" id="searchSegment" class="form-control" placeholder="Tìm mã khách hàng"></div>
+        <div class="col-md-4"><select id="segmentFilter" class="form-select"><option value="all">Tất cả phân khúc</option><option value="{{ SEGMENT_HIGH }}">Nguy cơ cao</option><option value="{{ SEGMENT_MEDIUM }}">Cần quan tâm</option><option value="{{ SEGMENT_SAFE }}">An toàn</option></select></div>
+        <div class="col-md-2"><button type="button" id="segmentReset" class="btn btn-outline-secondary w-100">Đặt lại</button></div>
+    </div>
+</div></div>
+
+<div class="modern-card"><div class="card-body">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead><tr><th>STT</th><th>Mã khách hàng</th><th>Xác suất tổng hợp</th><th>Phân khúc</th><th>Chiến lược CRM</th><th>Chi tiết</th></tr></thead>
+            <tbody>
+            {% for c in customers %}
+            <tr class="segment-row" data-customer="{{ c.MaHienThi }}" data-segment="{{ c.PhanKhuc }}">
+                <td>{{ loop.index }}</td><td class="fw-bold">{{ c.MaHienThi }}</td>
+                <td class="fw-bold text-ensemble">{{ "%.1f"|format(c.XacSuat_Ensemble * 100) }}%</td>
+                <td><span class="badge bg-{{ c.SegmentClass }} {% if c.SegmentClass == 'warning' %}text-dark{% endif %}">{{ c.PhanKhuc }}</span></td>
+                <td>{{ c.ChamSoc }}</td>
+                <td><a class="btn btn-outline-primary btn-sm" href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">Xem</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted">Chưa có dữ liệu hợp lệ.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const searchSegment = document.getElementById("searchSegment");
+const segmentFilter = document.getElementById("segmentFilter");
+const segmentRows = document.querySelectorAll(".segment-row");
+function filterSegments() {
+    const keyword = searchSegment.value.trim().toLowerCase();
+    const selected = segmentFilter.value;
+    segmentRows.forEach((row) => {
+        const matchSearch = row.dataset.customer.toLowerCase().includes(keyword);
+        const matchSegment = selected === "all" || row.dataset.segment === selected;
+        row.style.display = matchSearch && matchSegment ? "" : "none";
+    });
+}
+[searchSegment, segmentFilter].forEach((el) => el.addEventListener("input", filterSegments));
+document.getElementById("segmentReset").addEventListener("click", () => { searchSegment.value = ""; segmentFilter.value = "all"; filterSegments(); });
+</script>
+{% endblock %}

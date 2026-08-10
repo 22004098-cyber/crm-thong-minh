@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Đánh giá mô hình - {{ APP_NAME }}{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+    <div><h2>Đánh giá hiệu quả mô hình</h2><p>So sánh LSTM, XGBoost và mô hình kết hợp (Ensemble) bằng Accuracy, Precision, Recall và F1-score.</p></div>
+</section>
+
+<div class="row g-4">
+    {% for name, m in metrics.items() %}
+    <div class="col-lg-4">
+        <div class="modern-card h-100"><div class="card-body">
+            <h4 class="section-title">{{ name }}</h4>
+            <p class="text-muted">{% if name == 'Ensemble' %}Mô hình kết hợp Soft Voting{% else %}Kết quả dự đoán từ CSV{% endif %}</p>
+            <div class="row text-center g-3">
+                <div class="col-6"><div class="analysis-box"><small>Accuracy</small><h3>{{ m.accuracy }}%</h3></div></div>
+                <div class="col-6"><div class="analysis-box"><small>Precision</small><h3>{{ m.precision }}%</h3></div></div>
+                <div class="col-6"><div class="analysis-box"><small>Recall</small><h3>{{ m.recall }}%</h3></div></div>
+                <div class="col-6"><div class="analysis-box"><small>F1-score</small><h3>{{ m.f1 }}%</h3></div></div>
+            </div>
+        </div></div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="modern-card mt-4"><div class="card-body chart-box">
+    <h5 class="section-title">Biểu đồ so sánh mô hình</h5>
+    <canvas id="modelChart"></canvas>
+</div></div>
+
+<div class="row g-4 mt-1">
+    {% for name, m in metrics.items() %}
+    <div class="col-lg-4">
+        <div class="modern-card h-100"><div class="card-body">
+            <h5 class="section-title">Confusion Matrix - {{ name }}</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered text-center matrix-table">
+                    <tr><th></th><th colspan="2">Dự đoán</th></tr>
+                    <tr><th>Thực tế</th><th>Không</th><th>Rời bỏ</th></tr>
+                    <tr><th>Không</th><td>{{ m.cm.tn }}</td><td>{{ m.cm.fp }}</td></tr>
+                    <tr><th>Rời bỏ</th><td>{{ m.cm.fn }}</td><td>{{ m.cm.tp }}</td></tr>
+                </table>
+            </div>
+        </div></div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="modern-card mt-4"><div class="card-body">
+    <h5 class="section-title">Nhận xét kết quả</h5>
+    <p>Accuracy tốt nhất: <strong>{{ best.accuracy }}</strong></p>
+    <p>Precision tốt nhất: <strong>{{ best.precision }}</strong></p>
+    <p>Recall tốt nhất: <strong>{{ best.recall }}</strong></p>
+    <p>F1-score tốt nhất: <strong>{{ best.f1 }}</strong></p>
+    <div class="alert alert-success rounded-4 mb-0">Mô hình có hiệu quả cân bằng tốt nhất hiện tại là <strong>{{ best.f1 }}</strong>, dựa trên F1-score được tính trực tiếp từ CSV.</div>
+</div></div>
+
+<div class="modern-card mt-4"><div class="card-body">
+    <h5 class="section-title">Giải thích nhanh</h5>
+    <div class="row g-3">
+        <div class="col-md-3"><strong>TP:</strong> Dự đoán đúng khách hàng rời bỏ.</div>
+        <div class="col-md-3"><strong>TN:</strong> Dự đoán đúng khách hàng không rời bỏ.</div>
+        <div class="col-md-3"><strong>FP:</strong> Cảnh báo nhầm khách hàng sẽ rời bỏ.</div>
+        <div class="col-md-3"><strong>FN:</strong> Bỏ sót khách hàng thực sự rời bỏ.</div>
+    </div>
+</div></div>
+{% endblock %}
+
+{% block scripts %}
+<script id="metrics-data" type="application/json">{{ metrics | tojson }}</script>
+<script>
+const metrics = JSON.parse(document.getElementById("metrics-data").textContent);
+new Chart(document.getElementById("modelChart"), {
+    type: "bar",
+    data: {
+        labels: ["Accuracy", "Precision", "Recall", "F1-score"],
+        datasets: [
+            {label: "LSTM", data: [metrics.LSTM.accuracy, metrics.LSTM.precision, metrics.LSTM.recall, metrics.LSTM.f1], backgroundColor: "#7c3aed", borderRadius: 8},
+            {label: "XGBoost", data: [metrics.XGBoost.accuracy, metrics.XGBoost.precision, metrics.XGBoost.recall, metrics.XGBoost.f1], backgroundColor: "#f59e0b", borderRadius: 8},
+            {label: "Ensemble", data: [metrics.Ensemble.accuracy, metrics.Ensemble.precision, metrics.Ensemble.recall, metrics.Ensemble.f1], backgroundColor: "#0f766e", borderRadius: 8}
+        ]
+    },
+    options: {responsive: true, maintainAspectRatio: false, scales: {y: {beginAtZero: true, max: 100}}, plugins: {legend: {position: "bottom"}}}
+});
+</script>
+{% endblock %}
