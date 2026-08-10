@@ -3,13 +3,14 @@ import io
 import logging
 import os
 import re
+import smtplib
 import sqlite3
 from datetime import datetime
+from email.message import EmailMessage
+from email.utils import formataddr
 from pathlib import Path
 
 import pandas as pd
-import resend
-from resend.exceptions import ResendError
 from flask import Flask, Response, redirect, render_template, request, url_for
 from sklearn.metrics import (
     accuracy_score,
@@ -37,8 +38,8 @@ SEGMENT_HIGH = "Nguy cơ cao"
 SEGMENT_MEDIUM = "Cần quan tâm"
 SEGMENT_SAFE = "An toàn"
 STATUS_PENDING = "Chưa chăm sóc"
-STATUS_DONE = "Đã gửi"
-EMAIL_STATUS_DONE = "Đã gửi Email"
+STATUS_DONE = "Đã gửi Email"
+EMAIL_STATUS_DONE = "Đã gửi"
 LEGACY_STATUS_DONE = "Đã chăm sóc"
 STATUS_FAILED = "Gửi lỗi"
 DONE_STATUSES = (STATUS_DONE, EMAIL_STATUS_DONE, LEGACY_STATUS_DONE)
@@ -382,7 +383,7 @@ def is_valid_email(email):
 
 
 def is_email_config_ready():
-    return bool(os.environ.get("RESEND_API_KEY") and os.environ.get("RESEND_FROM_EMAIL"))
+    return bool(os.environ.get("GMAIL_SENDER_EMAIL") and os.environ.get("GMAIL_APP_PASSWORD"))
 
 
 def log_email_config_error(message):
@@ -392,8 +393,7 @@ def log_email_config_error(message):
 def log_email_error(
     customer_code,
     recipient_email,
-    from_email,
-    http_status,
+    sender_email,
     error_type,
     error_message,
 ):
@@ -403,8 +403,7 @@ def log_email_error(
                 "[EMAIL ERROR]",
                 f"Customer: {customer_code}",
                 f"Recipient: {recipient_email or 'N/A'}",
-                f"From: {from_email or 'N/A'}",
-                f"HTTP status: {http_status or 'N/A'}",
+                f"Sender: {sender_email or 'N/A'}",
                 f"Error type: {error_type or 'N/A'}",
                 f"Error message: {error_message or 'N/A'}",
             ]
@@ -412,104 +411,89 @@ def log_email_error(
     )
 
 
-def log_email_success(customer_code, recipient_email, email_id):
+def log_email_success(customer_code, recipient_email, sender_email, subject):
     app.logger.info(
         "\n".join(
             [
                 "[EMAIL SUCCESS]",
                 f"Customer: {customer_code}",
                 f"Recipient: {recipient_email}",
-                f"Email ID: {email_id or 'N/A'}",
+                f"Sender: {sender_email}",
+                f"Subject: {subject}",
             ]
         )
     )
 
 
-def get_resend_response_id(email):
-    if isinstance(email, dict):
-        return email.get("id")
-    return getattr(email, "id", None)
-
-
-def send_resend_email(customer_code, recipient_email, subject, content):
-    api_key = os.environ.get("RESEND_API_KEY")
-    from_email = os.environ.get("RESEND_FROM_EMAIL")
-    if not api_key:
-        error_message = "Missing RESEND_API_KEY"
+def send_gmail_email(customer_code, recipient_email, subject, content):
+    sender_email = os.environ.get("GMAIL_SENDER_EMAIL")
+    app_password = os.environ.get("GMAIL_APP_PASSWORD")
+    sender_name = os.environ.get("GMAIL_SENDER_NAME", APP_NAME)
+    if not sender_email:
+        error_message = "Missing GMAIL_SENDER_EMAIL"
         log_email_config_error(error_message)
         log_email_error(
             customer_code,
             recipient_email,
-            from_email,
-            None,
+            sender_email,
             "EmailConfigError",
             error_message,
         )
-        return False, None, "Cấu hình email chưa sẵn sàng. Thiếu RESEND_API_KEY."
-    if not from_email:
-        error_message = "Missing RESEND_FROM_EMAIL"
+        return False, None, "Cấu hình email chưa sẵn sàng. Thiếu GMAIL_SENDER_EMAIL."
+    if not app_password:
+        error_message = "Missing GMAIL_APP_PASSWORD"
         log_email_config_error(error_message)
         log_email_error(
             customer_code,
             recipient_email,
-            from_email,
-            None,
+            sender_email,
             "EmailConfigError",
             error_message,
         )
-        return False, None, "Cấu hình email chưa sẵn sàng. Thiếu RESEND_FROM_EMAIL."
+        return False, None, "Cấu hình email chưa sẵn sàng. Thiếu GMAIL_APP_PASSWORD."
     if not is_valid_email(recipient_email):
         error_message = "Email người nhận không hợp lệ."
         log_email_error(
             customer_code,
             recipient_email,
-            from_email,
-            None,
+            sender_email,
             "EmailValidationError",
             error_message,
         )
         return False, None, error_message
 
-    resend.api_key = api_key
+    message = EmailMessage()
+    message["From"] = formataddr((sender_name, sender_email))
+    message["To"] = recipient_email
+    message["Subject"] = subject
+    message.set_content(content)
+    message.add_alternative(content.replace("\n", "<br>"), subtype="html")
+
     try:
-        email = resend.Emails.send(
-            {
-                "from": from_email,
-                "to": [recipient_email],
-                "subject": subject,
-                "html": content.replace("\n", "<br>"),
-            }
-        )
-        email_id = get_resend_response_id(email)
-        log_email_success(customer_code, recipient_email, email_id)
-        return True, email_id, None
-    except ResendError as exc:
-        http_status = getattr(exc, "code", None)
-        error_type = getattr(exc, "error_type", exc.__class__.__name__)
-        error_message = getattr(exc, "message", str(exc))
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.ehlo()
+            smtp.login(sender_email, app_password)
+            smtp.send_message(message)
+        log_email_success(customer_code, recipient_email, sender_email, subject)
+        return True, None, None
+    except smtplib.SMTPException as exc:
+        error_message = str(exc)
         log_email_error(
             customer_code,
             recipient_email,
-            from_email,
-            http_status,
-            error_type,
+            sender_email,
+            exc.__class__.__name__,
             error_message,
         )
         return False, None, error_message
-    except Exception as exc:
-        response = getattr(exc, "response", None)
-        http_status = getattr(response, "status_code", None)
+    except OSError as exc:
         error_message = str(exc)
-        if response is not None:
-            try:
-                error_message = response.text or error_message
-            except Exception:
-                pass
         log_email_error(
             customer_code,
             recipient_email,
-            from_email,
-            http_status,
+            sender_email,
             exc.__class__.__name__,
             error_message,
         )
@@ -692,8 +676,7 @@ def gui_cham_soc(customer_code):
         log_email_error(
             customer["MaHienThi"],
             recipient_email,
-            os.environ.get("RESEND_FROM_EMAIL"),
-            None,
+            os.environ.get("GMAIL_SENDER_EMAIL"),
             "EmailValidationError",
             error_message,
         )
@@ -707,7 +690,7 @@ def gui_cham_soc(customer_code):
         )
         return redirect(f"{next_url}?email_status=error")
 
-    success, provider_message_id, error_message = send_resend_email(
+    success, provider_message_id, error_message = send_gmail_email(
         customer["MaHienThi"], recipient_email, email_subject, email_content
     )
     if success:
