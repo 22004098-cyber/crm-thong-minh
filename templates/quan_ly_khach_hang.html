@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Quản lý khách hàng - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<section class="page-heading"><div><h2>Quản lý khách hàng</h2><p>Dữ liệu AI chỉ xem, không chỉnh sửa thủ công.</p></div></section>
+<div class="modern-card mb-4"><div class="card-body">
+    <div class="row g-3">
+        <div class="col-lg-3"><input id="customerSearch" class="form-control" placeholder="Tìm mã KH"></div>
+        <div class="col-lg-3"><select id="customerSegment" class="form-select"><option value="all">Tất cả phân khúc</option><option value="{{ SEGMENT_HIGH }}">Nguy cơ cao</option><option value="{{ SEGMENT_MEDIUM }}">Cần quan tâm</option><option value="{{ SEGMENT_SAFE }}">An toàn</option></select></div>
+        <div class="col-lg-3"><select id="customerRisk" class="form-select"><option value="all">Tất cả nguy cơ</option><option value="high">Ensemble >= 60%</option><option value="low">Ensemble < 60%</option></select></div>
+        <div class="col-lg-3"><select id="customerStatus" class="form-select"><option value="all">Tất cả trạng thái</option><option value="{{ STATUS_PENDING }}">Chưa chăm sóc</option><option value="{{ STATUS_DONE }}">Đã gửi Email</option></select></div>
+    </div>
+</div></div>
+<div class="modern-card"><div class="card-body">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead><tr><th>Mã KH</th><th>LSTM</th><th>XGBoost</th><th>Ensemble</th><th>Phân khúc</th><th>Số lần chăm sóc</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead>
+            <tbody>
+            {% for c in customers %}
+            <tr class="customer-admin-row" data-code="{{ c.MaHienThi }}" data-segment="{{ c.PhanKhuc }}" data-status="{{ c.TrangThaiChamSoc }}" data-risk="{{ c.XacSuat_Ensemble }}">
+                <td class="fw-bold">{{ c.MaHienThi }}</td>
+                <td>{{ "%.1f"|format(c.XacSuat_LSTM * 100) }}%</td>
+                <td>{{ "%.1f"|format(c.XacSuat_XGBoost * 100) }}%</td>
+                <td>{{ "%.1f"|format(c.XacSuat_Ensemble * 100) }}%</td>
+                <td><span class="badge bg-{{ c.SegmentClass }} {% if c.SegmentClass == 'warning' %}text-dark{% endif %}">{{ c.PhanKhuc }}</span></td>
+                <td>{{ c.SoLanChamSoc }}</td>
+                <td>{{ c.TrangThaiChamSoc }}</td>
+                <td><a class="btn btn-outline-primary btn-sm" href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">Xem</a></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const cSearch = document.getElementById("customerSearch");
+const cSegment = document.getElementById("customerSegment");
+const cRisk = document.getElementById("customerRisk");
+const cStatus = document.getElementById("customerStatus");
+const cRows = document.querySelectorAll(".customer-admin-row");
+function filterCustomerAdmin() {
+    const key = cSearch.value.trim().toLowerCase();
+    cRows.forEach((row) => {
+        const risk = Number(row.dataset.risk);
+        const okKey = row.dataset.code.toLowerCase().includes(key);
+        const okSegment = cSegment.value === "all" || row.dataset.segment === cSegment.value;
+        const okStatus = cStatus.value === "all" || row.dataset.status === cStatus.value;
+        const okRisk = cRisk.value === "all" || (cRisk.value === "high" && risk >= 0.6) || (cRisk.value === "low" && risk < 0.6);
+        row.style.display = okKey && okSegment && okStatus && okRisk ? "" : "none";
+    });
+}
+[cSearch, cSegment, cRisk, cStatus].forEach((el) => el.addEventListener("input", filterCustomerAdmin));
+</script>
+{% endblock %}

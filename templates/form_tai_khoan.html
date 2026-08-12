@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{% if item %}Sửa tài khoản{% else %}Thêm tài khoản{% endif %} - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<section class="page-heading"><div><h2>{% if item %}Sửa tài khoản{% else %}Thêm tài khoản{% endif %}</h2><p>Không lưu mật khẩu gốc, hệ thống chỉ lưu password hash.</p></div></section>
+<div class="modern-card"><div class="card-body">
+    <form method="POST" class="row g-3">
+        <div class="col-md-6"><label class="form-label">Họ tên</label><input class="form-control" name="full_name" value="{{ item.full_name if item else '' }}" required></div>
+        <div class="col-md-6"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{ item.email if item else '' }}" required></div>
+        <div class="col-md-6"><label class="form-label">Username</label><input class="form-control" name="username" value="{{ item.username if item else '' }}" required></div>
+        <div class="col-md-6"><label class="form-label">Số điện thoại</label><input class="form-control" name="phone" value="{{ item.phone if item else '' }}"></div>
+        <div class="col-md-6">
+            <label class="form-label">Vai trò</label>
+            <select class="form-select" name="role">
+                <option value="{{ ROLE_EMPLOYEE }}" {% if item and item.role == ROLE_EMPLOYEE %}selected{% endif %}>Nhân viên</option>
+                <option value="{{ ROLE_ADMIN }}" {% if item and item.role == ROLE_ADMIN %}selected{% endif %}>Admin</option>
+            </select>
+        </div>
+        <div class="col-md-6"><label class="form-label">{% if item %}Mật khẩu mới{% else %}Mật khẩu{% endif %}</label><input class="form-control" type="password" name="password" {% if not item %}required{% endif %} minlength="8"></div>
+        <div class="col-md-6"><label class="form-label">Xác nhận mật khẩu</label><input class="form-control" type="password" name="confirm_password" {% if not item %}required{% endif %} minlength="8"></div>
+        <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Lưu</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('quan_ly_tai_khoan') }}">Quay lại</a>
+        </div>
+    </form>
+</div></div>
+{% endblock %}

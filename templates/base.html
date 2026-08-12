@@ -34,15 +34,29 @@
             <a class="sidebar-link {% if request.endpoint == 'phan_tich' %}active{% endif %}" href="{{ url_for('phan_tich') }}">
                 <i class="bi bi-search-heart"></i><span>Phân tích khách hàng</span>
             </a>
+            <a class="sidebar-link {% if request.endpoint == 'quan_ly_khach_hang' %}active{% endif %}" href="{{ url_for('quan_ly_khach_hang') }}">
+                <i class="bi bi-person-lines-fill"></i><span>Quản lý khách hàng</span>
+            </a>
             <a class="sidebar-link {% if request.endpoint == 'cham_soc' %}active{% endif %}" href="{{ url_for('cham_soc') }}">
                 <i class="bi bi-chat-dots-fill"></i><span>Chăm sóc khách hàng</span>
             </a>
             <a class="sidebar-link {% if request.endpoint in ['chien_dich_giu_chan', 'export_chien_dich_giu_chan'] %}active{% endif %}" href="{{ url_for('chien_dich_giu_chan') }}">
                 <i class="bi bi-bullseye"></i><span>Chiến dịch giữ chân</span>
             </a>
+            <a class="sidebar-link {% if request.endpoint == 'tro_ly_crm' %}active{% endif %}" href="{{ url_for('tro_ly_crm') }}">
+                <i class="bi bi-robot"></i><span>Trợ lý CRM</span>
+            </a>
+            <a class="sidebar-link {% if request.endpoint == 'thong_ke_bao_cao' %}active{% endif %}" href="{{ url_for('thong_ke_bao_cao') }}">
+                <i class="bi bi-clipboard-data-fill"></i><span>Thống kê báo cáo</span>
+            </a>
             <a class="sidebar-link {% if request.endpoint == 'danh_gia_mo_hinh' %}active{% endif %}" href="{{ url_for('danh_gia_mo_hinh') }}">
                 <i class="bi bi-bar-chart-line-fill"></i><span>Đánh giá mô hình</span>
             </a>
+            {% if current_user and current_user.role == ROLE_ADMIN %}
+            <a class="sidebar-link {% if request.endpoint in ['quan_ly_tai_khoan', 'them_tai_khoan', 'sua_tai_khoan'] %}active{% endif %}" href="{{ url_for('quan_ly_tai_khoan') }}">
+                <i class="bi bi-people-fill"></i><span>Quản lý tài khoản</span>
+            </a>
+            {% endif %}
         </nav>
 
         <div class="sidebar-note">
@@ -60,13 +74,22 @@
                 <p class="eyebrow mb-1">Xin chào!</p>
                 <h1 class="topbar-title">Hệ thống CRM Thông Minh</h1>
             </div>
-            <div class="system-pill d-none d-sm-flex">
-                <span class="status-dot"></span>
-                Hệ thống hoạt động
+            {% if current_user %}
+            <div class="d-none d-sm-flex align-items-center gap-2">
+                <a class="btn btn-light" href="{{ url_for('tai_khoan_cua_toi') }}"><i class="bi bi-person-circle"></i> {{ current_user.full_name }}</a>
+                <a class="btn btn-outline-danger" href="{{ url_for('dang_xuat') }}"><i class="bi bi-box-arrow-right"></i> Đăng xuất</a>
             </div>
+            {% endif %}
         </header>
 
         <main class="page-content">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} rounded-4">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+            {% endwith %}
             {% block content %}{% endblock %}
         </main>
 
@@ -92,9 +115,19 @@
             <a class="sidebar-link {% if request.endpoint == 'du_doan_roi_bo' %}active{% endif %}" href="{{ url_for('du_doan_roi_bo') }}"><i class="bi bi-activity"></i><span>Dự đoán rời bỏ</span></a>
             <a class="sidebar-link {% if request.endpoint == 'phan_khuc' %}active{% endif %}" href="{{ url_for('phan_khuc') }}"><i class="bi bi-diagram-3-fill"></i><span>Phân khúc khách hàng</span></a>
             <a class="sidebar-link {% if request.endpoint == 'phan_tich' %}active{% endif %}" href="{{ url_for('phan_tich') }}"><i class="bi bi-search-heart"></i><span>Phân tích khách hàng</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'quan_ly_khach_hang' %}active{% endif %}" href="{{ url_for('quan_ly_khach_hang') }}"><i class="bi bi-person-lines-fill"></i><span>Quản lý khách hàng</span></a>
             <a class="sidebar-link {% if request.endpoint == 'cham_soc' %}active{% endif %}" href="{{ url_for('cham_soc') }}"><i class="bi bi-chat-dots-fill"></i><span>Chăm sóc khách hàng</span></a>
             <a class="sidebar-link {% if request.endpoint in ['chien_dich_giu_chan', 'export_chien_dich_giu_chan'] %}active{% endif %}" href="{{ url_for('chien_dich_giu_chan') }}"><i class="bi bi-bullseye"></i><span>Chiến dịch giữ chân</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'tro_ly_crm' %}active{% endif %}" href="{{ url_for('tro_ly_crm') }}"><i class="bi bi-robot"></i><span>Trợ lý CRM</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'thong_ke_bao_cao' %}active{% endif %}" href="{{ url_for('thong_ke_bao_cao') }}"><i class="bi bi-clipboard-data-fill"></i><span>Thống kê báo cáo</span></a>
             <a class="sidebar-link {% if request.endpoint == 'danh_gia_mo_hinh' %}active{% endif %}" href="{{ url_for('danh_gia_mo_hinh') }}"><i class="bi bi-bar-chart-line-fill"></i><span>Đánh giá mô hình</span></a>
+            {% if current_user and current_user.role == ROLE_ADMIN %}
+            <a class="sidebar-link {% if request.endpoint in ['quan_ly_tai_khoan', 'them_tai_khoan', 'sua_tai_khoan'] %}active{% endif %}" href="{{ url_for('quan_ly_tai_khoan') }}"><i class="bi bi-people-fill"></i><span>Quản lý tài khoản</span></a>
+            {% endif %}
+            {% if current_user %}
+            <a class="sidebar-link" href="{{ url_for('tai_khoan_cua_toi') }}"><i class="bi bi-person-circle"></i><span>Tài khoản của tôi</span></a>
+            <a class="sidebar-link" href="{{ url_for('dang_xuat') }}"><i class="bi bi-box-arrow-right"></i><span>Đăng xuất</span></a>
+            {% endif %}
         </nav>
     </div>
 </div>

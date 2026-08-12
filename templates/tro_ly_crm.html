@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Trợ lý CRM - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<section class="page-heading"><div><h2>Trợ lý CRM</h2><p>Hỏi nhanh về khách hàng, phân khúc, chăm sóc và hiệu quả mô hình.</p></div></section>
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="modern-card"><div class="card-body">
+            <form method="POST">
+                <label class="form-label">Câu hỏi</label>
+                <div class="input-group">
+                    <input class="form-control" name="question" value="{{ question }}" placeholder="Ví dụ: KH001 thuộc phân khúc nào?">
+                    <button class="btn btn-primary" type="submit">Hỏi trợ lý</button>
+                </div>
+            </form>
+            {% if answer %}
+            <div class="alert alert-info rounded-4 mt-4 mb-0">{{ answer }}</div>
+            {% endif %}
+        </div></div>
+    </div>
+    <div class="col-lg-5">
+        <div class="modern-card"><div class="card-body">
+            <h5 class="section-title">Gợi ý câu hỏi</h5>
+            <ul class="mb-0">
+                <li>Có bao nhiêu khách nguy cơ cao?</li>
+                <li>Có bao nhiêu khách chưa chăm sóc?</li>
+                <li>KH001 thuộc phân khúc nào?</li>
+                <li>LSTM của KH001 là bao nhiêu?</li>
+                <li>XGBoost của KH001 là bao nhiêu?</li>
+                <li>Ensemble của KH001 là bao nhiêu?</li>
+                <li>Accuracy của các mô hình?</li>
+                <li>Mô hình nào có F1-score cao nhất?</li>
+            </ul>
+        </div></div>
+    </div>
+</div>
+{% endblock %}

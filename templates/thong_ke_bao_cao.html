@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Thống kê báo cáo - {{ APP_NAME }}{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <div><h2>Thống kê & báo cáo</h2><p>Báo cáo CRM theo khách hàng, phân khúc, trạng thái và thời gian chăm sóc.</p></div>
+</section>
+<div class="modern-card mb-4"><div class="card-body">
+    <form class="row g-3 align-items-end" method="GET">
+        <div class="col-md-3"><label class="form-label">Kiểu thời gian</label><select class="form-select" name="period_type"><option value="month" {% if period_type == 'month' %}selected{% endif %}>Tháng</option><option value="quarter" {% if period_type == 'quarter' %}selected{% endif %}>Quý</option><option value="year" {% if period_type == 'year' %}selected{% endif %}>Năm</option></select></div>
+        <div class="col-md-3"><label class="form-label">Năm</label><input class="form-control" type="number" name="year" value="{{ year }}"></div>
+        <div class="col-md-3"><label class="form-label">Tháng</label><input class="form-control" type="number" min="1" max="12" name="month" value="{{ month }}"></div>
+        <div class="col-md-2"><label class="form-label">Quý</label><input class="form-control" type="number" min="1" max="4" name="quarter" value="{{ quarter }}"></div>
+        <div class="col-md-1"><button class="btn btn-primary w-100" type="submit">Lọc</button></div>
+    </form>
+</div></div>
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="kpi-card tone-green"><div class="kpi-label">Đã gửi Email</div><div class="kpi-value">{{ status_counts.done }}</div></div></div>
+    <div class="col-md-3"><div class="kpi-card tone-orange"><div class="kpi-label">Chưa chăm sóc</div><div class="kpi-value">{{ status_counts.pending }}</div></div></div>
+    <div class="col-md-3"><div class="kpi-card tone-blue"><div class="kpi-label">Email thành công</div><div class="kpi-value">{{ status_counts.email_success }}</div></div></div>
+    <div class="col-md-3"><div class="kpi-card tone-red"><div class="kpi-label">Gửi lỗi</div><div class="kpi-value">{{ status_counts.email_failed }}</div></div></div>
+</div>
+<div class="row g-4">
+    <div class="col-lg-4"><div class="modern-card h-100"><div class="card-body chart-box"><h5 class="section-title">Theo phân khúc</h5><canvas id="segmentReportChart"></canvas></div></div></div>
+    <div class="col-lg-4"><div class="modern-card h-100"><div class="card-body chart-box"><h5 class="section-title">Trạng thái chăm sóc</h5><canvas id="statusReportChart"></canvas></div></div></div>
+    <div class="col-lg-4"><div class="modern-card h-100"><div class="card-body chart-box"><h5 class="section-title">Chăm sóc theo tháng</h5><canvas id="monthReportChart"></canvas></div></div></div>
+</div>
+<div class="modern-card mt-4"><div class="card-body">
+    <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+        <h5 class="section-title mb-0">Xuất báo cáo CSV</h5>
+        <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-outline-primary" href="{{ url_for('xuat_bao_cao_nguy_co_cao') }}">Nguy cơ cao</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('xuat_bao_cao', report_type='chua-cham-soc') }}">Chưa chăm sóc</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('xuat_bao_cao', report_type='da-cham-soc') }}">Đã chăm sóc</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('xuat_bao_cao', report_type='lich-su-cham-soc') }}">Lịch sử</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('xuat_bao_cao', report_type='theo-thoi-gian', period_type=period_type, year=year, month=month, quarter=quarter) }}">Theo thời gian</a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead><tr><th>Mã KH</th><th>Phân khúc</th><th>Email</th><th>Trạng thái</th><th>Nhân viên</th><th>Thời gian</th></tr></thead>
+            <tbody>
+            {% for h in history[:20] %}
+            <tr><td>{{ h.customer_code }}</td><td>{{ h.segment }}</td><td>{{ h.recipient_email or 'Chưa có' }}</td><td>{{ h.status }}</td><td>{{ h.employee_name or 'Chưa ghi nhận' }}</td><td>{{ h.sent_at or h.updated_at }}</td></tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted">Chưa có lịch sử trong kỳ được chọn.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div></div>
+{% endblock %}
+{% block scripts %}
+<script id="report-data" type="application/json">{{ {"segments": segment_counts, "status": status_counts, "months": monthly_counts} | tojson }}</script>
+<script>
+const reportData = JSON.parse(document.getElementById("report-data").textContent);
+new Chart(document.getElementById("segmentReportChart"), {type:"doughnut", data:{labels:Object.keys(reportData.segments), datasets:[{data:Object.values(reportData.segments), backgroundColor:["#dc2626","#f59e0b","#16a34a"]}]}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}}});
+new Chart(document.getElementById("statusReportChart"), {type:"bar", data:{labels:["Đã gửi","Chưa chăm sóc","Gửi lỗi"], datasets:[{data:[reportData.status.done, reportData.status.pending, reportData.status.email_failed], backgroundColor:["#16a34a","#f59e0b","#dc2626"], borderRadius:8}]}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}}});
+new Chart(document.getElementById("monthReportChart"), {type:"line", data:{labels:Object.keys(reportData.months), datasets:[{label:"Lượt chăm sóc", data:Object.values(reportData.months), borderColor:"#2563eb", backgroundColor:"rgba(37,99,235,.15)", tension:.3, fill:true}]}, options:{responsive:true, maintainAspectRatio:false}});
+</script>
+{% endblock %}

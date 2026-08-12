@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Tài khoản của tôi - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<section class="page-heading"><div><h2>Tài khoản của tôi</h2><p>Cập nhật hồ sơ cá nhân và đổi mật khẩu.</p></div></section>
+<div class="modern-card"><div class="card-body">
+    <form method="POST" class="row g-3">
+        <div class="col-md-6"><label class="form-label">Họ tên</label><input class="form-control" name="full_name" value="{{ user.full_name }}" required></div>
+        <div class="col-md-6"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{ user.email }}" required></div>
+        <div class="col-md-6"><label class="form-label">Số điện thoại</label><input class="form-control" name="phone" value="{{ user.phone or '' }}"></div>
+        <div class="col-md-6"><label class="form-label">Vai trò</label><input class="form-control" value="{{ user.role }}" disabled></div>
+        <div class="col-md-6"><label class="form-label">Mật khẩu mới</label><input class="form-control" type="password" name="password" minlength="8"></div>
+        <div class="col-md-6"><label class="form-label">Xác nhận mật khẩu</label><input class="form-control" type="password" name="confirm_password" minlength="8"></div>
+        <div class="col-12"><button class="btn btn-primary" type="submit">Lưu thay đổi</button></div>
+    </form>
+</div></div>
+{% endblock %}
