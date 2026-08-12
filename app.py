@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import logging
 import os
 import re
@@ -12,6 +13,8 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from functools import wraps
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import pandas as pd
 from flask import (
@@ -62,6 +65,7 @@ ROLE_EMPLOYEE = "NHAN_VIEN"
 USER_ACTIVE = "active"
 USER_LOCKED = "locked"
 RESET_TOKEN_MINUTES = 30
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 def init_db():
@@ -565,20 +569,23 @@ def is_valid_email(email):
 
 
 def is_email_config_ready():
-    return bool(os.environ.get("GMAIL_SENDER_EMAIL") and os.environ.get("GMAIL_APP_PASSWORD"))
+    brevo_ready = bool(os.environ.get("BREVO_API_KEY") and os.environ.get("BREVO_SENDER_EMAIL"))
+    gmail_ready = bool(os.environ.get("GMAIL_SENDER_EMAIL") and os.environ.get("GMAIL_APP_PASSWORD"))
+    return brevo_ready or gmail_ready
 
 
 def log_email_config_error(message):
     app.logger.error("[EMAIL CONFIG ERROR] %s", message)
 
 
-def log_email_config(sender_email, app_password):
+def log_email_config(sender_email, secret_value, provider):
     app.logger.info(
         "\n".join(
             [
                 "[EMAIL CONFIG]",
+                f"Provider: {provider}",
                 f"Sender configured: {'YES' if sender_email else 'NO'}",
-                f"Password configured: {'YES' if app_password else 'NO'}",
+                f"Secret configured: {'YES' if secret_value else 'NO'}",
             ]
         )
     )
@@ -631,11 +638,71 @@ def log_email_success(customer_code, recipient_email, sender_email, subject):
     )
 
 
+def send_brevo_email(customer_code, recipient_email, subject, content):
+    api_key = os.environ.get("BREVO_API_KEY")
+    sender_email = os.environ.get("BREVO_SENDER_EMAIL") or os.environ.get("GMAIL_SENDER_EMAIL")
+    sender_name = os.environ.get("BREVO_SENDER_NAME") or os.environ.get("GMAIL_SENDER_NAME", APP_NAME)
+    log_email_config(sender_email, api_key, "BREVO_API")
+    log_email_send(customer_code, recipient_email)
+    if not api_key:
+        error_message = "Missing BREVO_API_KEY"
+        log_email_config_error(error_message)
+        log_email_error(customer_code, recipient_email, sender_email, "EmailConfigError", error_message)
+        return False, None, "Cấu hình email production chưa sẵn sàng. Thiếu BREVO_API_KEY."
+    if not sender_email:
+        error_message = "Missing BREVO_SENDER_EMAIL"
+        log_email_config_error(error_message)
+        log_email_error(customer_code, recipient_email, sender_email, "EmailConfigError", error_message)
+        return False, None, "Cấu hình email production chưa sẵn sàng. Thiếu BREVO_SENDER_EMAIL."
+    if not is_valid_email(recipient_email):
+        error_message = "Email người nhận không hợp lệ."
+        log_email_error(customer_code, recipient_email, sender_email, "EmailValidationError", error_message)
+        return False, None, error_message
+
+    payload = {
+        "sender": {"name": sender_name, "email": sender_email},
+        "to": [{"email": recipient_email}],
+        "subject": subject,
+        "htmlContent": content.replace("\n", "<br>"),
+        "textContent": content,
+    }
+    req = Request(
+        BREVO_API_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "api-key": api_key,
+            "accept": "application/json",
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(req, timeout=15) as response:
+            body = response.read().decode("utf-8")
+            data = json.loads(body) if body else {}
+            message_id = data.get("messageId")
+            log_email_success(customer_code, recipient_email, sender_email, subject)
+            return True, message_id, None
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        error_message = f"Brevo HTTP {exc.code}: {body}"
+        log_email_error(customer_code, recipient_email, sender_email, "BrevoHTTPError", error_message)
+        return False, None, error_message
+    except (URLError, TimeoutError, socket.timeout) as exc:
+        error_message = f"Không kết nối được Brevo API qua HTTPS. Chi tiết: {exc}"
+        log_email_error(customer_code, recipient_email, sender_email, exc.__class__.__name__, error_message)
+        return False, None, error_message
+    except (OSError, json.JSONDecodeError) as exc:
+        error_message = f"Brevo API trả về lỗi không xử lý được. Chi tiết: {exc}"
+        log_email_error(customer_code, recipient_email, sender_email, exc.__class__.__name__, error_message)
+        return False, None, error_message
+
+
 def send_gmail_email(customer_code, recipient_email, subject, content):
     sender_email = os.environ.get("GMAIL_SENDER_EMAIL")
     app_password = os.environ.get("GMAIL_APP_PASSWORD")
     sender_name = os.environ.get("GMAIL_SENDER_NAME", APP_NAME)
-    log_email_config(sender_email, app_password)
+    log_email_config(sender_email, app_password, "GMAIL_SMTP")
     log_email_send(customer_code, recipient_email)
     if not sender_email:
         error_message = "Missing GMAIL_SENDER_EMAIL"
@@ -746,6 +813,12 @@ def send_gmail_email(customer_code, recipient_email, subject, content):
             f"{error_message} Chi tiết: {exc}",
         )
         return False, None, error_message
+
+
+def send_care_email(customer_code, recipient_email, subject, content):
+    if os.environ.get("BREVO_API_KEY"):
+        return send_brevo_email(customer_code, recipient_email, subject, content)
+    return send_gmail_email(customer_code, recipient_email, subject, content)
 
 
 def filter_customers(df, segment=None, status=None):
@@ -1221,7 +1294,7 @@ def gui_cham_soc(customer_code):
         )
         return redirect(f"{next_url}?email_status=error")
 
-    success, provider_message_id, error_message = send_gmail_email(
+    success, provider_message_id, error_message = send_care_email(
         customer["MaHienThi"], recipient_email, email_subject, email_content
     )
     if success:

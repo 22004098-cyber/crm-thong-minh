@@ -9,10 +9,10 @@
 {% if email_status == "success" %}
 <div class="alert alert-success rounded-4">Email chăm sóc đã được gửi thành công và trạng thái đã được lưu.</div>
 {% elif email_status == "error" %}
-<div class="alert alert-danger rounded-4">Chưa gửi được email chăm sóc. Hệ thống đã lưu trạng thái lỗi, vui lòng kiểm tra cấu hình Gmail SMTP hoặc nội dung email.</div>
+<div class="alert alert-danger rounded-4">Chưa gửi được email chăm sóc. Hệ thống đã lưu trạng thái lỗi, vui lòng kiểm tra cấu hình email hoặc nội dung email.</div>
 {% endif %}
 {% if not email_config_ready %}
-<div class="alert alert-warning rounded-4">Cấu hình email chưa sẵn sàng. Cần thêm GMAIL_SENDER_EMAIL và GMAIL_APP_PASSWORD trước khi gửi email thật.</div>
+<div class="alert alert-warning rounded-4">Cấu hình email chưa sẵn sàng. Trên Render hãy thêm BREVO_API_KEY và BREVO_SENDER_EMAIL, hoặc dùng GMAIL_SENDER_EMAIL và GMAIL_APP_PASSWORD khi chạy local.</div>
 {% endif %}
 <section class="profile-hero mb-4">
     <div>
@@ -53,7 +53,7 @@
     <div class="col-lg-4">
         <div class="modern-card h-100"><div class="card-body">
             <h5 class="section-title">Email chăm sóc</h5>
-            <p class="text-muted">Nhân viên kiểm tra người nhận, tiêu đề và nội dung trước khi gửi. Trạng thái chỉ chuyển thành Đã gửi Email khi Gmail SMTP gửi thành công.</p>
+            <p class="text-muted">Nhân viên kiểm tra người nhận, tiêu đề và nội dung trước khi gửi. Trạng thái chỉ chuyển thành Đã gửi Email khi hệ thống gửi thành công.</p>
             {% if customer.TrangThaiChamSoc == STATUS_DONE %}
             <button class="btn btn-success w-100" disabled>Đã gửi Email</button>
             {% else %}
