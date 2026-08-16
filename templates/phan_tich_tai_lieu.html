@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Phân tích tài liệu - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <div>
+        <h2>Phân tích tài liệu</h2>
+        <p>Tải lên file CSV hoặc Excel để hệ thống tổng hợp khách hàng, tính nguy cơ rời bỏ và cập nhật dữ liệu CRM.</p>
+    </div>
+</section>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="modern-card">
+            <div class="card-body">
+                <h5 class="section-title">Tải lên dữ liệu</h5>
+                {% if error %}
+                <div class="alert alert-danger rounded-4">{{ error }}</div>
+                {% endif %}
+                <form method="POST" enctype="multipart/form-data">
+                    <label class="form-label">File CSV / Excel</label>
+                    <input class="form-control mb-3" type="file" name="document_file" accept=".csv,.xlsx,.xls" required>
+                    <button class="btn btn-primary w-100" type="submit">
+                        <i class="bi bi-cloud-arrow-up"></i> Phân tích và cập nhật dữ liệu
+                    </button>
+                </form>
+                <div class="alert alert-info rounded-4 mt-4 mb-0">
+                    File cần có các cột tương đương: CustomerID, InvoiceDate, Quantity, UnitPrice.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="modern-card">
+            <div class="card-body">
+                <h5 class="section-title">Kết quả phân tích</h5>
+                {% if result %}
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6"><div class="stat-card"><span class="stat-label">File</span><strong>{{ result.filename }}</strong></div></div>
+                    <div class="col-md-6"><div class="stat-card"><span class="stat-label">Tổng khách hàng</span><strong>{{ result.total_customers }}</strong></div></div>
+                    <div class="col-md-6"><div class="stat-card"><span class="stat-label">Khách dự đoán rời bỏ</span><strong>{{ result.churn_customers }}</strong></div></div>
+                    <div class="col-md-6"><div class="stat-card"><span class="stat-label">Tỷ lệ rời bỏ</span><strong>{{ result.churn_rate }}%</strong></div></div>
+                    <div class="col-md-12"><div class="stat-card"><span class="stat-label">Tổng doanh thu</span><strong>{{ result.total_revenue }}</strong></div></div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Mã khách hàng</th>
+                                <th>Recency</th>
+                                <th>Tổng chi tiêu</th>
+                                <th>Ensemble</th>
+                                <th>Phân khúc</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in result.summary_table %}
+                            <tr>
+                                <td>{{ row.CustomerID }}</td>
+                                <td>{{ row.Recency }}</td>
+                                <td>{{ "{:,.2f}".format(row.Total_Spend) }}</td>
+                                <td>{{ "%.1f"|format(row.XacSuat_Ensemble * 100) }}%</td>
+                                <td><span class="badge bg-{{ row.SegmentClass }}">{{ row.PhanKhuc }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Chưa có file mới được phân tích trong phiên này.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
