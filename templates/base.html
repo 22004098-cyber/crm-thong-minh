@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
@@ -16,71 +16,71 @@
         <a class="brand" href="{{ url_for('tong_quan') }}">
             <span class="brand-mark"><i class="bi bi-stars"></i></span>
             <span>
-                <strong>CRM ThĂ´ng Minh</strong>
-                <small>Dá»± Ä‘oĂ¡n rá»i bá»</small>
+                <strong>CRM Thông Minh</strong>
+                <small>Dự đoán rời bỏ</small>
             </span>
         </a>
 
         <nav class="sidebar-nav">
             <a class="sidebar-link {% if request.endpoint == 'tong_quan' %}active{% endif %}" href="{{ url_for('tong_quan') }}">
-                <i class="bi bi-grid-1x2-fill"></i><span>Tá»•ng quan</span>
+                <i class="bi bi-grid-1x2-fill"></i><span>Tổng quan</span>
             </a>
             <a class="sidebar-link {% if request.endpoint == 'phan_tich_tai_lieu' %}active{% endif %}" href="{{ url_for('phan_tich_tai_lieu') }}">
                 <i class="bi bi-file-earmark-bar-graph"></i><span>Phân tích tài liệu</span>
             </a>
             <a class="sidebar-link {% if request.endpoint == 'du_doan_roi_bo' %}active{% endif %}" href="{{ url_for('du_doan_roi_bo') }}">
-                <i class="bi bi-activity"></i><span>Dá»± Ä‘oĂ¡n rá»i bá»</span>
+                <i class="bi bi-activity"></i><span>Dự đoán rời bỏ</span>
             </a>
             <a class="sidebar-link {% if request.endpoint == 'phan_khuc' %}active{% endif %}" href="{{ url_for('phan_khuc') }}">
-                <i class="bi bi-diagram-3-fill"></i><span>PhĂ¢n khĂºc khĂ¡ch hĂ ng</span>
+                <i class="bi bi-diagram-3-fill"></i><span>Phân khúc khách hàng</span>
             </a>
             <a class="sidebar-link {% if request.endpoint == 'phan_tich' %}active{% endif %}" href="{{ url_for('phan_tich') }}">
-                <i class="bi bi-search-heart"></i><span>PhĂ¢n tĂ­ch khĂ¡ch hĂ ng</span>
+                <i class="bi bi-search-heart"></i><span>Phân tích khách hàng</span>
             </a>
             <a class="sidebar-link {% if request.endpoint == 'quan_ly_khach_hang' %}active{% endif %}" href="{{ url_for('quan_ly_khach_hang') }}">
-                <i class="bi bi-person-lines-fill"></i><span>Quáº£n lĂ½ khĂ¡ch hĂ ng</span>
+                <i class="bi bi-person-lines-fill"></i><span>Quản lý khách hàng</span>
             </a>
             <a class="sidebar-link {% if request.endpoint == 'cham_soc' %}active{% endif %}" href="{{ url_for('cham_soc') }}">
-                <i class="bi bi-chat-dots-fill"></i><span>ChÄƒm sĂ³c khĂ¡ch hĂ ng</span>
+                <i class="bi bi-chat-dots-fill"></i><span>Chăm sóc khách hàng</span>
             </a>
             <a class="sidebar-link {% if request.endpoint in ['chien_dich_giu_chan', 'export_chien_dich_giu_chan'] %}active{% endif %}" href="{{ url_for('chien_dich_giu_chan') }}">
-                <i class="bi bi-bullseye"></i><span>Chiáº¿n dá»‹ch giá»¯ chĂ¢n</span>
+                <i class="bi bi-bullseye"></i><span>Chiến dịch giữ chân</span>
             </a>
             <a class="sidebar-link {% if request.endpoint == 'tro_ly_crm' %}active{% endif %}" href="{{ url_for('tro_ly_crm') }}">
-                <i class="bi bi-robot"></i><span>Trá»£ lĂ½ CRM</span>
+                <i class="bi bi-robot"></i><span>Trợ lý CRM</span>
             </a>
             <a class="sidebar-link {% if request.endpoint == 'thong_ke_bao_cao' %}active{% endif %}" href="{{ url_for('thong_ke_bao_cao') }}">
-                <i class="bi bi-clipboard-data-fill"></i><span>Thá»‘ng kĂª bĂ¡o cĂ¡o</span>
+                <i class="bi bi-clipboard-data-fill"></i><span>Thống kê báo cáo</span>
             </a>
             <a class="sidebar-link {% if request.endpoint == 'danh_gia_mo_hinh' %}active{% endif %}" href="{{ url_for('danh_gia_mo_hinh') }}">
-                <i class="bi bi-bar-chart-line-fill"></i><span>ÄĂ¡nh giĂ¡ mĂ´ hĂ¬nh</span>
+                <i class="bi bi-bar-chart-line-fill"></i><span>Đánh giá mô hình</span>
             </a>
             {% if current_user and current_user.role == ROLE_ADMIN %}
             <a class="sidebar-link {% if request.endpoint in ['quan_ly_tai_khoan', 'them_tai_khoan', 'sua_tai_khoan'] %}active{% endif %}" href="{{ url_for('quan_ly_tai_khoan') }}">
-                <i class="bi bi-people-fill"></i><span>Quáº£n lĂ½ tĂ i khoáº£n</span>
+                <i class="bi bi-people-fill"></i><span>Quản lý tài khoản</span>
             </a>
             {% endif %}
         </nav>
 
         <div class="sidebar-note">
             <span class="status-dot"></span>
-            Há»‡ thá»‘ng hoáº¡t Ä‘á»™ng
+            Hệ thống hoạt động
         </div>
     </aside>
 
     <div class="content-shell">
         <header class="topbar">
-            <button class="btn btn-light d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu" aria-label="Má»Ÿ menu">
+            <button class="btn btn-light d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu" aria-label="Mở menu">
                 <i class="bi bi-list"></i>
             </button>
             <div>
-                <p class="eyebrow mb-1">Xin chĂ o!</p>
-                <h1 class="topbar-title">Há»‡ thá»‘ng CRM ThĂ´ng Minh</h1>
+                <p class="eyebrow mb-1">Xin chào!</p>
+                <h1 class="topbar-title">Hệ thống CRM Thông Minh</h1>
             </div>
             {% if current_user %}
             <div class="d-none d-sm-flex align-items-center gap-2">
                 <a class="btn btn-light" href="{{ url_for('tai_khoan_cua_toi') }}"><i class="bi bi-person-circle"></i> {{ current_user.full_name }}</a>
-                <a class="btn btn-outline-danger" href="{{ url_for('dang_xuat') }}"><i class="bi bi-box-arrow-right"></i> ÄÄƒng xuáº¥t</a>
+                <a class="btn btn-outline-danger" href="{{ url_for('dang_xuat') }}"><i class="bi bi-box-arrow-right"></i> Đăng xuất</a>
             </div>
             {% endif %}
         </header>
@@ -97,9 +97,9 @@
         </main>
 
         <footer class="footer">
-            <strong>CRM ThĂ´ng Minh - Customer Churn Prediction System</strong>
-            <span>LSTM + XGBoost + MĂ´ hĂ¬nh káº¿t há»£p (Ensemble Soft Voting)</span>
-            <span>Â© 2026</span>
+            <strong>CRM Thông Minh - Customer Churn Prediction System</strong>
+            <span>LSTM + XGBoost + Mô hình kết hợp (Ensemble Soft Voting)</span>
+            <span>© 2026</span>
         </footer>
     </div>
 </div>
@@ -108,29 +108,28 @@
     <div class="offcanvas-header">
         <a class="brand" href="{{ url_for('tong_quan') }}">
             <span class="brand-mark"><i class="bi bi-stars"></i></span>
-            <span><strong>CRM ThĂ´ng Minh</strong><small>Dá»± Ä‘oĂ¡n rá»i bá»</small></span>
+            <span><strong>CRM Thông Minh</strong><small>Dự đoán rời bỏ</small></span>
         </a>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="ÄĂ³ng"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Đóng"></button>
     </div>
     <div class="offcanvas-body">
         <nav class="sidebar-nav">
-            <a class="sidebar-link {% if request.endpoint == 'tong_quan' %}active{% endif %}" href="{{ url_for('tong_quan') }}"><i class="bi bi-grid-1x2-fill"></i><span>Tá»•ng quan</span></a>
-            <a class="sidebar-link {% if request.endpoint == 'phan_tich_tai_lieu' %}active{% endif %}" href="{{ url_for('phan_tich_tai_lieu') }}"><i class="bi bi-file-earmark-bar-graph"></i><span>Phân tích tài liệu</span></a>
-            <a class="sidebar-link {% if request.endpoint == 'du_doan_roi_bo' %}active{% endif %}" href="{{ url_for('du_doan_roi_bo') }}"><i class="bi bi-activity"></i><span>Dá»± Ä‘oĂ¡n rá»i bá»</span></a>
-            <a class="sidebar-link {% if request.endpoint == 'phan_khuc' %}active{% endif %}" href="{{ url_for('phan_khuc') }}"><i class="bi bi-diagram-3-fill"></i><span>PhĂ¢n khĂºc khĂ¡ch hĂ ng</span></a>
-            <a class="sidebar-link {% if request.endpoint == 'phan_tich' %}active{% endif %}" href="{{ url_for('phan_tich') }}"><i class="bi bi-search-heart"></i><span>PhĂ¢n tĂ­ch khĂ¡ch hĂ ng</span></a>
-            <a class="sidebar-link {% if request.endpoint == 'quan_ly_khach_hang' %}active{% endif %}" href="{{ url_for('quan_ly_khach_hang') }}"><i class="bi bi-person-lines-fill"></i><span>Quáº£n lĂ½ khĂ¡ch hĂ ng</span></a>
-            <a class="sidebar-link {% if request.endpoint == 'cham_soc' %}active{% endif %}" href="{{ url_for('cham_soc') }}"><i class="bi bi-chat-dots-fill"></i><span>ChÄƒm sĂ³c khĂ¡ch hĂ ng</span></a>
-            <a class="sidebar-link {% if request.endpoint in ['chien_dich_giu_chan', 'export_chien_dich_giu_chan'] %}active{% endif %}" href="{{ url_for('chien_dich_giu_chan') }}"><i class="bi bi-bullseye"></i><span>Chiáº¿n dá»‹ch giá»¯ chĂ¢n</span></a>
-            <a class="sidebar-link {% if request.endpoint == 'tro_ly_crm' %}active{% endif %}" href="{{ url_for('tro_ly_crm') }}"><i class="bi bi-robot"></i><span>Trá»£ lĂ½ CRM</span></a>
-            <a class="sidebar-link {% if request.endpoint == 'thong_ke_bao_cao' %}active{% endif %}" href="{{ url_for('thong_ke_bao_cao') }}"><i class="bi bi-clipboard-data-fill"></i><span>Thá»‘ng kĂª bĂ¡o cĂ¡o</span></a>
-            <a class="sidebar-link {% if request.endpoint == 'danh_gia_mo_hinh' %}active{% endif %}" href="{{ url_for('danh_gia_mo_hinh') }}"><i class="bi bi-bar-chart-line-fill"></i><span>ÄĂ¡nh giĂ¡ mĂ´ hĂ¬nh</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'tong_quan' %}active{% endif %}" href="{{ url_for('tong_quan') }}"><i class="bi bi-grid-1x2-fill"></i><span>Tổng quan</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'du_doan_roi_bo' %}active{% endif %}" href="{{ url_for('du_doan_roi_bo') }}"><i class="bi bi-activity"></i><span>Dự đoán rời bỏ</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'phan_khuc' %}active{% endif %}" href="{{ url_for('phan_khuc') }}"><i class="bi bi-diagram-3-fill"></i><span>Phân khúc khách hàng</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'phan_tich' %}active{% endif %}" href="{{ url_for('phan_tich') }}"><i class="bi bi-search-heart"></i><span>Phân tích khách hàng</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'quan_ly_khach_hang' %}active{% endif %}" href="{{ url_for('quan_ly_khach_hang') }}"><i class="bi bi-person-lines-fill"></i><span>Quản lý khách hàng</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'cham_soc' %}active{% endif %}" href="{{ url_for('cham_soc') }}"><i class="bi bi-chat-dots-fill"></i><span>Chăm sóc khách hàng</span></a>
+            <a class="sidebar-link {% if request.endpoint in ['chien_dich_giu_chan', 'export_chien_dich_giu_chan'] %}active{% endif %}" href="{{ url_for('chien_dich_giu_chan') }}"><i class="bi bi-bullseye"></i><span>Chiến dịch giữ chân</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'tro_ly_crm' %}active{% endif %}" href="{{ url_for('tro_ly_crm') }}"><i class="bi bi-robot"></i><span>Trợ lý CRM</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'thong_ke_bao_cao' %}active{% endif %}" href="{{ url_for('thong_ke_bao_cao') }}"><i class="bi bi-clipboard-data-fill"></i><span>Thống kê báo cáo</span></a>
+            <a class="sidebar-link {% if request.endpoint == 'danh_gia_mo_hinh' %}active{% endif %}" href="{{ url_for('danh_gia_mo_hinh') }}"><i class="bi bi-bar-chart-line-fill"></i><span>Đánh giá mô hình</span></a>
             {% if current_user and current_user.role == ROLE_ADMIN %}
-            <a class="sidebar-link {% if request.endpoint in ['quan_ly_tai_khoan', 'them_tai_khoan', 'sua_tai_khoan'] %}active{% endif %}" href="{{ url_for('quan_ly_tai_khoan') }}"><i class="bi bi-people-fill"></i><span>Quáº£n lĂ½ tĂ i khoáº£n</span></a>
+            <a class="sidebar-link {% if request.endpoint in ['quan_ly_tai_khoan', 'them_tai_khoan', 'sua_tai_khoan'] %}active{% endif %}" href="{{ url_for('quan_ly_tai_khoan') }}"><i class="bi bi-people-fill"></i><span>Quản lý tài khoản</span></a>
             {% endif %}
             {% if current_user %}
-            <a class="sidebar-link" href="{{ url_for('tai_khoan_cua_toi') }}"><i class="bi bi-person-circle"></i><span>TĂ i khoáº£n cá»§a tĂ´i</span></a>
-            <a class="sidebar-link" href="{{ url_for('dang_xuat') }}"><i class="bi bi-box-arrow-right"></i><span>ÄÄƒng xuáº¥t</span></a>
+            <a class="sidebar-link" href="{{ url_for('tai_khoan_cua_toi') }}"><i class="bi bi-person-circle"></i><span>Tài khoản của tôi</span></a>
+            <a class="sidebar-link" href="{{ url_for('dang_xuat') }}"><i class="bi bi-box-arrow-right"></i><span>Đăng xuất</span></a>
             {% endif %}
         </nav>
     </div>

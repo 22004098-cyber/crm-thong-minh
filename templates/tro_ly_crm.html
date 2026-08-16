@@ -1,36 +1,152 @@
 {% extends "base.html" %}
-{% block title %}Trợ lý CRM - {{ APP_NAME }}{% endblock %}
+{% block title %}Trợ lý CRM AI - {{ APP_NAME }}{% endblock %}
 {% block content %}
-<section class="page-heading"><div><h2>Trợ lý CRM</h2><p>Hỏi nhanh về khách hàng, phân khúc, chăm sóc và hiệu quả mô hình.</p></div></section>
-<div class="row g-4">
-    <div class="col-lg-7">
-        <div class="modern-card"><div class="card-body">
-            <form method="POST">
-                <label class="form-label">Câu hỏi</label>
-                <div class="input-group">
-                    <input class="form-control" name="question" value="{{ question }}" placeholder="Ví dụ: KH001 thuộc phân khúc nào?">
-                    <button class="btn btn-primary" type="submit">Hỏi trợ lý</button>
-                </div>
-            </form>
-            {% if answer %}
-            <div class="alert alert-info rounded-4 mt-4 mb-0">{{ answer }}</div>
-            {% endif %}
-        </div></div>
+<section class="page-heading">
+    <div>
+        <h2>Trợ lý CRM (AI)</h2>
+        <p>Hỏi đáp trực tiếp với AI về khách hàng, phân khúc, chăm sóc và chiến lược.</p>
     </div>
+</section>
+
+<div class="row g-4">
+    <!-- Cột bên trái: Khung chat động kiểu bong bóng -->
+    <div class="col-lg-7">
+        <div class="modern-card">
+            <div class="card-body p-0">
+                <!-- KHUNG CHAT -->
+                <div id="chat-box" style="height: 450px; overflow-y: auto; padding: 20px; background-color: #f0f2f5;">
+                    <div class="mb-3">
+                        <span class="badge bg-primary mb-1">Trợ lý AI</span>
+                        <div class="p-3 bg-white rounded-3 shadow-sm d-inline-block">
+                            Xin chào! Tôi là Trợ lý CRM tích hợp AI (Gemini). Tôi có thể giúp gì cho bạn hôm nay?
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Ô NHẬP TEXT VÀ NÚT GỬI -->
+                <div class="p-3 border-top bg-white">
+                    <div class="input-group">
+                        <input type="text" id="user-input" class="form-control" placeholder="Ví dụ: KH001 dạo này thế nào?..." autocomplete="off">
+                        <button class="btn btn-primary" id="btn-send" type="button">
+                            Gửi AI <i class="bi bi-send ms-1"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột bên phải: Gợi ý câu hỏi (Bấm vào tự động gửi) -->
     <div class="col-lg-5">
-        <div class="modern-card"><div class="card-body">
-            <h5 class="section-title">Gợi ý câu hỏi</h5>
-            <ul class="mb-0">
-                <li>Có bao nhiêu khách nguy cơ cao?</li>
-                <li>Có bao nhiêu khách chưa chăm sóc?</li>
-                <li>KH001 thuộc phân khúc nào?</li>
-                <li>LSTM của KH001 là bao nhiêu?</li>
-                <li>XGBoost của KH001 là bao nhiêu?</li>
-                <li>Ensemble của KH001 là bao nhiêu?</li>
-                <li>Accuracy của các mô hình?</li>
-                <li>Mô hình nào có F1-score cao nhất?</li>
-            </ul>
-        </div></div>
+        <div class="modern-card">
+            <div class="card-body">
+                <h5 class="section-title">Gợi ý câu hỏi</h5>
+                <ul class="mb-0" style="list-style-type: disc; padding-left: 20px;">
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Có bao nhiêu khách nguy cơ cao?</li>
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Có bao nhiêu khách chưa chăm sóc?</li>
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">KH001 thuộc phân khúc nào?</li>
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">LSTM của KH001 là bao nhiêu?</li>
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">XGBoost của KH001 là bao nhiêu?</li>
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Ensemble của KH001 là bao nhiêu?</li>
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Accuracy của các mô hình?</li>
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Mô hình nào có F1-score cao nhất?</li>
+                </ul>
+            </div>
+        </div>
     </div>
 </div>
+
+<!-- JAVASCRIPT XỬ LÝ GỬI TIN NHẮN VÀ CLICK GỢI Ý -->
+<script>
+    document.getElementById('btn-send').addEventListener('click', sendMessage);
+    document.getElementById('user-input').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') sendMessage();
+    });
+
+    // Khi bấm vào câu hỏi gợi ý ở cột phải -> Tự điền và gửi luôn
+    document.querySelectorAll('.suggestion-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const inputField = document.getElementById('user-input');
+            inputField.value = this.textContent.trim();
+            sendMessage();
+        });
+    });
+
+    async function sendMessage() {
+        const inputField = document.getElementById('user-input');
+        const chatBox = document.getElementById('chat-box');
+        const question = inputField.value.trim();
+
+        if (!question) return;
+
+        // 1. In tin nhắn của người dùng lên màn hình
+        chatBox.innerHTML += `
+            <div class="mb-3 text-end">
+                <span class="badge bg-secondary mb-1">Bạn</span>
+                <br>
+                <div class="p-3 bg-primary text-white rounded-3 shadow-sm d-inline-block text-start">
+                    ${question}
+                </div>
+            </div>
+        `;
+        inputField.value = '';
+        chatBox.scrollTop = chatBox.scrollHeight; // Cuộn xuống đáy
+
+        // 2. In dòng "Đang suy nghĩ..."
+        const loadingId = 'loading-' + Date.now();
+        chatBox.innerHTML += `
+            <div id="${loadingId}" class="mb-3">
+                <span class="badge bg-primary mb-1">Trợ lý AI</span>
+                <br>
+                <div class="p-3 bg-white rounded-3 shadow-sm d-inline-block text-muted" style="font-style: italic;">
+                    Đang suy nghĩ...
+                </div>
+            </div>
+        `;
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+            // 3. Gửi câu hỏi xuống file app.py (hàm /api/chat)
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: question })
+            });
+            
+            const data = await response.json();
+            
+            // 4. Xóa dòng "Đang suy nghĩ..."
+            const loadingElem = document.getElementById(loadingId);
+            if (loadingElem) loadingElem.remove();
+            
+            // Format xuống dòng cho đẹp
+            const rawAnswer = data.answer || data.result || 'Không nhận được phản hồi.';
+            const formattedAnswer = rawAnswer.replace(/\n/g, '<br>');
+
+            // 5. In câu trả lời của AI lên màn hình
+            chatBox.innerHTML += `
+                <div class="mb-3">
+                    <span class="badge bg-primary mb-1">Trợ lý AI</span>
+                    <br>
+                    <div class="p-3 bg-white rounded-3 shadow-sm d-inline-block border">
+                        ${formattedAnswer}
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            const loadingElem = document.getElementById(loadingId);
+            if (loadingElem) loadingElem.remove();
+            chatBox.innerHTML += `
+                <div class="mb-3">
+                    <span class="badge bg-danger mb-1">Lỗi</span>
+                    <br>
+                    <div class="p-3 bg-white rounded-3 shadow-sm d-inline-block text-danger border border-danger">
+                        Mất kết nối tới server AI. Hãy kiểm tra lại terminal!
+                    </div>
+                </div>
+            `;
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
 {% endblock %}

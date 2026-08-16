@@ -1,76 +1,212 @@
 {% extends "base.html" %}
-{% block title %}Phân tích tài liệu - {{ APP_NAME }}{% endblock %}
+
+{% block title %}Phân tích tài liệu - CRM Thông Minh{% endblock %}
+
 {% block content %}
-<section class="page-heading">
-    <div>
-        <h2>Phân tích tài liệu</h2>
-        <p>Tải lên file CSV hoặc Excel để hệ thống tổng hợp khách hàng, tính nguy cơ rời bỏ và cập nhật dữ liệu CRM.</p>
-    </div>
-</section>
+<!-- CSS Khắc phục trực tiếp lỗi hiển thị màu chữ và tràn khung tên file -->
+<style>
+    /* 1. Ép màu chữ mờ (text-muted) sang màu xám sáng để hiển thị rõ trên nền tối */
+    .text-muted, small.text-muted, div.text-muted {
+        color: #cbd5e1 !important; 
+    }
+    
+    /* 2. Sửa nhãn hiển thị Tên File không bị tràn khung và có thiết kế gọn gàng */
+    .file-badge-custom {
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        background-color: rgba(255, 255, 255, 0.1) !important;
+        color: #e2e8f0 !important;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-size: 11px;
+        margin-top: 6px;
+    }
 
-<div class="row g-4">
-    <div class="col-lg-5">
-        <div class="modern-card">
-            <div class="card-body">
-                <h5 class="section-title">Tải lên dữ liệu</h5>
-                {% if error %}
-                <div class="alert alert-danger rounded-4">{{ error }}</div>
-                {% endif %}
-                <form method="POST" enctype="multipart/form-data">
-                    <label class="form-label">File CSV / Excel</label>
-                    <input class="form-control mb-3" type="file" name="document_file" accept=".csv,.xlsx,.xls" required>
-                    <button class="btn btn-primary w-100" type="submit">
-                        <i class="bi bi-cloud-arrow-up"></i> Phân tích và cập nhật dữ liệu
-                    </button>
-                </form>
-                <div class="alert alert-info rounded-4 mt-4 mb-0">
-                    File cần có các cột tương đương: CustomerID, InvoiceDate, Quantity, UnitPrice.
+    /* Đảm bảo tiêu đề thẻ luôn sáng rõ */
+    .card-title, h2, h3, h5, h6 {
+        color: #ffffff !important;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold text-white mb-1">
+                <i class="bi bi-file-earmark-bar-graph text-primary me-2"></i>Phân tích tài liệu & Dữ liệu Bán hàng
+            </h3>
+            <p class="text-muted mb-0">Tải lên file Excel/CSV bán hàng, dữ liệu NPS để tự động phân tích hành vi và nguy cơ rời bỏ</p>
+        </div>
+    </div>
+
+    <!-- Alert Thông báo Lỗi -->
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
+    <!-- Card Upload File -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-dark border-secondary text-white shadow-sm">
+                <div class="card-body p-4">
+                    <h5 class="card-title fw-bold mb-3"><i class="bi bi-cloud-upload text-info me-2"></i>Tải lên tài liệu phân tích (.xlsx, .csv)</h5>
+                    <form id="uploadForm" action="{{ url_for('phan_tich_tai_lieu') }}" method="POST" enctype="multipart/form-data">
+                        <div class="row align-items-center g-3">
+                            <div class="col-md-8">
+                                <input type="file" class="form-control bg-dark text-white border-secondary" id="document_file" name="document_file" accept=".xlsx, .xls, .csv" required>
+                                <div class="form-text text-muted">Hỗ trợ định dạng Amazon Sales Dataset, tập dữ liệu NPS, lịch sử giao dịch mua hàng.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="submit" id="submitBtn" class="btn btn-primary w-100 fw-bold">
+                                    <span id="btnText"><i class="bi bi-cpu me-2"></i>Bắt đầu Phân tích</span>
+                                    <span id="btnSpinner" class="d-none">
+                                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                        Đang xử lý dữ liệu...
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-lg-7">
-        <div class="modern-card">
-            <div class="card-body">
-                <h5 class="section-title">Kết quả phân tích</h5>
-                {% if result %}
-                <div class="row g-3 mb-4">
-                    <div class="col-md-6"><div class="stat-card"><span class="stat-label">File</span><strong>{{ result.filename }}</strong></div></div>
-                    <div class="col-md-6"><div class="stat-card"><span class="stat-label">Tổng khách hàng</span><strong>{{ result.total_customers }}</strong></div></div>
-                    <div class="col-md-6"><div class="stat-card"><span class="stat-label">Khách dự đoán rời bỏ</span><strong>{{ result.churn_customers }}</strong></div></div>
-                    <div class="col-md-6"><div class="stat-card"><span class="stat-label">Tỷ lệ rời bỏ</span><strong>{{ result.churn_rate }}%</strong></div></div>
-                    <div class="col-md-12"><div class="stat-card"><span class="stat-label">Tổng doanh thu</span><strong>{{ result.total_revenue }}</strong></div></div>
+    {% if result %}
+    <!-- Khung thông báo Khung Chat AI đã hoàn tất -->
+    <div class="alert alert-success bg-dark border-success text-white mb-4 d-flex align-items-center shadow-sm" role="alert">
+        <div class="p-2 bg-success rounded-circle me-3">
+            <i class="bi bi-robot text-white fs-4"></i>
+        </div>
+        <div>
+            <h6 class="fw-bold mb-1 text-success"><i class="bi bi-check-circle-fill me-1"></i> Trợ lý CRM đã phân tích xong!</h6>
+            <span>Dữ liệu từ file <strong>{{ result.filename }}</strong> đã được xử lý thành công. Hệ thống đã tự động tính toán nguy cơ rời bỏ (Recency > 90 ngày) và trích xuất chỉ số tổng quan dưới đây.</span>
+        </div>
+    </div>
+
+    <!-- Kết quả Thống kê -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card bg-dark border-secondary text-white p-3 shadow-sm h-100">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div style="width: 70%;">
+                        <div class="text-muted small fw-bold">TỔNG KHÁCH HÀNG</div>
+                        <h2 class="fw-bold my-1 text-white">{{ result.total_customers }}</h2>
+                        <span class="file-badge-custom" title="File: {{ result.filename }}">File: {{ result.filename }}</span>
+                    </div>
+                    <div class="p-3 bg-primary bg-opacity-20 rounded">
+                        <i class="bi bi-people-fill text-primary fs-3"></i>
+                    </div>
                 </div>
-                <div class="table-responsive">
-                    <table class="table align-middle">
-                        <thead>
-                            <tr>
-                                <th>Mã khách hàng</th>
-                                <th>Recency</th>
-                                <th>Tổng chi tiêu</th>
-                                <th>Ensemble</th>
-                                <th>Phân khúc</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in result.summary_table %}
-                            <tr>
-                                <td>{{ row.CustomerID }}</td>
-                                <td>{{ row.Recency }}</td>
-                                <td>{{ "{:,.2f}".format(row.Total_Spend) }}</td>
-                                <td>{{ "%.1f"|format(row.XacSuat_Ensemble * 100) }}%</td>
-                                <td><span class="badge bg-{{ row.SegmentClass }}">{{ row.PhanKhuc }}</span></td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-dark border-secondary text-white p-3 shadow-sm h-100">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-muted small fw-bold">NGUY CƠ RỜI BỎ (>90 Ngày)</div>
+                        <h2 class="fw-bold my-1 text-danger">{{ result.churn_customers }}</h2>
+                        <span class="text-danger small"><i class="bi bi-arrow-up"></i> {{ result.churn_rate }}% Tổng số KH</span>
+                    </div>
+                    <div class="p-3 bg-danger bg-opacity-20 rounded">
+                        <i class="bi bi-person-x-fill text-danger fs-3"></i>
+                    </div>
                 </div>
-                {% else %}
-                <p class="text-muted mb-0">Chưa có file mới được phân tích trong phiên này.</p>
-                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-dark border-secondary text-white p-3 shadow-sm h-100">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-muted small fw-bold">KHÁCH HÀNG AN TOÀN</div>
+                        <h2 class="fw-bold my-1 text-success">{{ result.safe_customers }}</h2>
+                        <span class="text-success small">{{ (100 - result.churn_rate)|round(2) }}% Đang hoạt động</span>
+                    </div>
+                    <div class="p-3 bg-success bg-opacity-20 rounded">
+                        <i class="bi bi-shield-check text-success fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-dark border-secondary text-white p-3 shadow-sm h-100">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-muted small fw-bold">TỔNG DOANH THU</div>
+                        <h3 class="fw-bold my-1 text-warning">${{ result.total_revenue }}</h3>
+                        <span class="text-muted small">Từ tập dữ liệu</span>
+                    </div>
+                    <div class="p-3 bg-warning bg-opacity-20 rounded">
+                        <i class="bi bi-currency-dollar text-warning fs-3"></i>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- Bảng danh sách xem trước -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card bg-dark border-secondary text-white shadow-sm">
+                <div class="card-header border-secondary bg-transparent d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-table text-info me-2"></i>Xem trước kết quả phân tích dữ liệu</h5>
+                    <span class="badge bg-info">Top {{ result.summary_table|length }} Dòng có Recency cao nhất</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover mb-0 align-middle">
+                            <thead>
+                                <tr class="border-secondary text-muted">
+                                    <th>Mã Khách Hàng (CustomerID)</th>
+                                    <th>Số ngày chưa quay lại (Recency)</th>
+                                    <th>Số đơn hàng</th>
+                                    <th>Tổng chi tiêu ($)</th>
+                                    <th>Trạng thái Dự đoán</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in result.summary_table %}
+                                <tr class="border-secondary">
+                                    <td class="fw-bold text-info">{{ row.CustomerID }}</td>
+                                    <td>{{ row.Recency }} ngày</td>
+                                    <td>{{ row.Orders_Count }}</td>
+                                    <td class="text-warning fw-bold">${{ "%.2f"|format(row.Total_Spend) }}</td>
+                                    <td>
+                                        {% if row.Churn == 1 %}
+                                        <span class="badge bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>Rời bỏ (Churn)</span>
+                                        {% else %}
+                                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Hoạt động (Safe)</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
+
+<!-- Script hỗ trợ vòng xoay Loading -->
+<script>
+    document.getElementById('uploadForm').addEventListener('submit', function() {
+        var btn = document.getElementById('submitBtn');
+        var text = document.getElementById('btnText');
+        var spinner = document.getElementById('btnSpinner');
+        
+        btn.disabled = true;
+        text.classList.add('d-none');
+        spinner.classList.remove('d-none');
+    });
+</script>
 {% endblock %}

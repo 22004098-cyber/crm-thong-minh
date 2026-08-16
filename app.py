@@ -1,4 +1,7 @@
-﻿import csv
+import google.generativeai as genai
+from flask import jsonify 
+
+import csv
 import io
 import json
 import logging
@@ -16,12 +19,13 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+
+
 import pandas as pd
 from flask import (
     Flask,
     Response,
     flash,
-    jsonify,
     redirect,
     render_template,
     request,
@@ -46,20 +50,20 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "data" / "customer_churn_test_report.csv"
 DB_PATH = BASE_DIR / "crm.db"
 
-APP_NAME = "CRM ThĂ´ng Minh"
+APP_NAME = "CRM Thông Minh"
 APP_FULL_NAME = (
-    "Há»‡ thá»‘ng CRM thĂ´ng minh há»— trá»£ dá»± Ä‘oĂ¡n khĂ¡ch hĂ ng rá»i bá» "
-    "vĂ  chÄƒm sĂ³c khĂ¡ch hĂ ng"
+    "Hệ thống CRM thông minh hỗ trợ dự đoán khách hàng rời bỏ "
+    "và chăm sóc khách hàng"
 )
 
-SEGMENT_HIGH = "Nguy cÆ¡ cao"
-SEGMENT_MEDIUM = "Cáº§n quan tĂ¢m"
-SEGMENT_SAFE = "An toĂ n"
-STATUS_PENDING = "ChÆ°a chÄƒm sĂ³c"
-STATUS_DONE = "ÄĂ£ gá»­i Email"
-EMAIL_STATUS_DONE = "ÄĂ£ gá»­i"
-LEGACY_STATUS_DONE = "ÄĂ£ chÄƒm sĂ³c"
-STATUS_FAILED = "Gá»­i lá»—i"
+SEGMENT_HIGH = "Nguy cơ cao"
+SEGMENT_MEDIUM = "Cần quan tâm"
+SEGMENT_SAFE = "An toàn"
+STATUS_PENDING = "Chưa chăm sóc"
+STATUS_DONE = "Đã gửi Email"
+EMAIL_STATUS_DONE = "Đã gửi"
+LEGACY_STATUS_DONE = "Đã chăm sóc"
+STATUS_FAILED = "Gửi lỗi"
 DONE_STATUSES = (STATUS_DONE, EMAIL_STATUS_DONE, LEGACY_STATUS_DONE)
 ROLE_ADMIN = "ADMIN"
 ROLE_EMPLOYEE = "NHAN_VIEN"
@@ -141,14 +145,14 @@ def init_db():
         now = datetime.now().strftime("%d/%m/%Y %H:%M")
         default_users = [
             (
-                "Quáº£n trá»‹ viĂªn",
+                "Quản trị viên",
                 "admin@crm.local",
                 "admin",
                 ROLE_ADMIN,
                 "Admin12345",
             ),
             (
-                "NhĂ¢n viĂªn CRM",
+                "Nhân viên CRM",
                 "nhanvien@crm.local",
                 "nhanvien",
                 ROLE_EMPLOYEE,
@@ -221,7 +225,7 @@ def admin_required(view):
         if not user:
             return redirect(url_for("dang_nhap", next=request.path))
         if user["role"] != ROLE_ADMIN:
-            flash("Báº¡n khĂ´ng cĂ³ quyá»n truy cáº­p chá»©c nÄƒng quáº£n trá»‹ tĂ i khoáº£n.", "danger")
+            flash("Bạn không có quyền truy cập chức năng quản trị tài khoản.", "danger")
             return redirect(url_for("tong_quan"))
         return view(*args, **kwargs)
 
@@ -238,11 +242,11 @@ def add_no_cache_headers(response):
 
 def validate_password(password, confirm=None):
     if not password:
-        return "Máº­t kháº©u khĂ´ng Ä‘Æ°á»£c rá»—ng."
+        return "Mật khẩu không được rỗng."
     if len(password) < 8:
-        return "Máº­t kháº©u cáº§n cĂ³ Ă­t nháº¥t 8 kĂ½ tá»±."
+        return "Mật khẩu cần có ít nhất 8 ký tự."
     if confirm is not None and password != confirm:
-        return "Máº­t kháº©u xĂ¡c nháº­n khĂ´ng khá»›p."
+        return "Mật khẩu xác nhận không khớp."
     return None
 
 
@@ -287,10 +291,10 @@ def get_segment(probability):
 
 def get_care_action(segment):
     if segment == SEGMENT_HIGH:
-        return "Voucher 20% + Æ°u tiĂªn liĂªn há»‡ giá»¯ chĂ¢n"
+        return "Voucher 20% + ưu tiên liên hệ giữ chân"
     if segment == SEGMENT_MEDIUM:
-        return "Gá»­i Æ°u Ä‘Ă£i vĂ  gá»£i Ă½ sáº£n pháº©m phĂ¹ há»£p"
-    return "TĂ­ch Ä‘iá»ƒm vĂ  chÄƒm sĂ³c Ä‘á»‹nh ká»³"
+        return "Gửi ưu đãi và gợi ý sản phẩm phù hợp"
+    return "Tích điểm và chăm sóc định kỳ"
 
 
 def badge_class(segment):
@@ -342,23 +346,22 @@ def load_data():
     df["DuDoan_XGBoost"] = normalize_prediction(df["DuDoan_XGBoost"])
 
     df["XacSuat_TrungBinh"] = (df["XacSuat_LSTM"] + df["XacSuat_XGBoost"]) / 2
-    if "XacSuat_Ensemble" in df.columns:
-        df["XacSuat_Ensemble"] = normalize_probability(df["XacSuat_Ensemble"])
-    else:
-        df["XacSuat_Ensemble"] = df["XacSuat_TrungBinh"]
+    df["XacSuat_Ensemble"] = df.get("XacSuat_Ensemble", df["XacSuat_TrungBinh"])
     df["DuDoan_Ensemble"] = (df["XacSuat_Ensemble"] >= 0.5).astype(int)
 
     df = df.reset_index(drop=True)
+    
+    # --- CHỖ CẦN SỬA: Ưu tiên dùng CustomerID nếu có trong file Excel ---
     if "CustomerID" in df.columns:
         df["MaHienThi"] = df["CustomerID"].astype(str)
-    elif "MaKhachHang" in df.columns:
-        df["MaHienThi"] = df["MaKhachHang"].astype(str)
     else:
         df["MaHienThi"] = [f"KH{i + 1:03d}" for i in range(len(df))]
+
     if "PhanKhuc" not in df.columns:
         df["PhanKhuc"] = df["XacSuat_Ensemble"].apply(get_segment)
     if "ChamSoc" not in df.columns:
         df["ChamSoc"] = df["PhanKhuc"].apply(get_care_action)
+
     df["SegmentClass"] = df["PhanKhuc"].apply(badge_class)
 
     care_status = load_care_status_map()
@@ -367,7 +370,6 @@ def load_data():
     )
 
     return df
-
 
 def find_customer(customer_code):
     code = (customer_code or "").strip().upper()
@@ -541,37 +543,37 @@ def save_care_action(
 def default_email_subject(customer):
     segment = customer["PhanKhuc"]
     if segment == SEGMENT_HIGH:
-        return "Æ¯u Ä‘Ă£i giá»¯ chĂ¢n khĂ¡ch hĂ ng - Voucher 20%"
+        return "Ưu đãi giữ chân khách hàng - Voucher 20%"
     if segment == SEGMENT_MEDIUM:
-        return "Æ¯u Ä‘Ă£i cĂ¡ nhĂ¢n hĂ³a dĂ nh riĂªng cho quĂ½ khĂ¡ch"
-    return "Cáº£m Æ¡n quĂ½ khĂ¡ch Ä‘Ă£ Ä‘á»“ng hĂ nh cĂ¹ng chĂºng tĂ´i"
+        return "Ưu đãi cá nhân hóa dành riêng cho quý khách"
+    return "Cảm ơn quý khách đã đồng hành cùng chúng tôi"
 
 
 def default_email_content(customer):
     segment = customer["PhanKhuc"]
     if segment == SEGMENT_HIGH:
         body = (
-            "Cáº£m Æ¡n quĂ½ khĂ¡ch Ä‘Ă£ tin tÆ°á»Ÿng vĂ  sá»­ dá»¥ng dá»‹ch vá»¥ cá»§a chĂºng tĂ´i. "
-            "Äá»ƒ tri Ă¢n vĂ  tiáº¿p tá»¥c Ä‘á»“ng hĂ nh cĂ¹ng quĂ½ khĂ¡ch, chĂºng tĂ´i gá»­i táº·ng "
-            "voucher Æ°u Ä‘Ă£i 20% cho láº§n sá»­ dá»¥ng tiáº¿p theo. Ráº¥t mong quĂ½ khĂ¡ch "
-            "tiáº¿p tá»¥c tráº£i nghiá»‡m dá»‹ch vá»¥ trong thá»i gian tá»›i."
+            "Cảm ơn quý khách đã tin tưởng và sử dụng dịch vụ của chúng tôi. "
+            "Để tri ân và tiếp tục đồng hành cùng quý khách, chúng tôi gửi tặng "
+            "voucher ưu đãi 20% cho lần sử dụng tiếp theo. Rất mong quý khách "
+            "tiếp tục trải nghiệm dịch vụ trong thời gian tới."
         )
     elif segment == SEGMENT_MEDIUM:
         body = (
-            "ChĂºng tĂ´i gá»­i Ä‘áº¿n quĂ½ khĂ¡ch má»™t Æ°u Ä‘Ă£i cĂ¡ nhĂ¢n hĂ³a cĂ¹ng cĂ¡c gá»£i Ă½ "
-            "sáº£n pháº©m/dá»‹ch vá»¥ phĂ¹ há»£p vá»›i nhu cáº§u hiá»‡n táº¡i. Hy vá»ng nhá»¯ng Ä‘á» xuáº¥t "
-            "nĂ y giĂºp quĂ½ khĂ¡ch cĂ³ tráº£i nghiá»‡m tá»‘t hÆ¡n."
+            "Chúng tôi gửi đến quý khách một ưu đãi cá nhân hóa cùng các gợi ý "
+            "sản phẩm/dịch vụ phù hợp với nhu cầu hiện tại. Hy vọng những đề xuất "
+            "này giúp quý khách có trải nghiệm tốt hơn."
         )
     else:
         body = (
-            "Cáº£m Æ¡n quĂ½ khĂ¡ch Ä‘Ă£ luĂ´n Ä‘á»“ng hĂ nh cĂ¹ng chĂºng tĂ´i. QuĂ½ khĂ¡ch sáº½ tiáº¿p tá»¥c "
-            "Ä‘Æ°á»£c tĂ­ch Ä‘iá»ƒm vĂ  nháº­n cĂ¡c hoáº¡t Ä‘á»™ng chÄƒm sĂ³c Ä‘á»‹nh ká»³ tá»« há»‡ thá»‘ng CRM."
+            "Cảm ơn quý khách đã luôn đồng hành cùng chúng tôi. Quý khách sẽ tiếp tục "
+            "được tích điểm và nhận các hoạt động chăm sóc định kỳ từ hệ thống CRM."
         )
     return (
-        f"Xin chĂ o khĂ¡ch hĂ ng {customer['MaHienThi']},\n\n"
+        f"Xin chào khách hàng {customer['MaHienThi']},\n\n"
         f"{body}\n\n"
-        f"Äá» xuáº¥t CRM: {customer['ChamSoc']}.\n\n"
-        "TrĂ¢n trá»ng,\nCRM ThĂ´ng Minh"
+        f"Đề xuất CRM: {customer['ChamSoc']}.\n\n"
+        "Trân trọng,\nCRM Thông Minh"
     )
 
 
@@ -659,14 +661,14 @@ def send_brevo_email(customer_code, recipient_email, subject, content):
         error_message = "Missing BREVO_API_KEY"
         log_email_config_error(error_message)
         log_email_error(customer_code, recipient_email, sender_email, "EmailConfigError", error_message)
-        return False, None, "Cáº¥u hĂ¬nh email production chÆ°a sáºµn sĂ ng. Thiáº¿u BREVO_API_KEY."
+        return False, None, "Cấu hình email production chưa sẵn sàng. Thiếu BREVO_API_KEY."
     if not sender_email:
         error_message = "Missing BREVO_SENDER_EMAIL"
         log_email_config_error(error_message)
         log_email_error(customer_code, recipient_email, sender_email, "EmailConfigError", error_message)
-        return False, None, "Cáº¥u hĂ¬nh email production chÆ°a sáºµn sĂ ng. Thiáº¿u BREVO_SENDER_EMAIL."
+        return False, None, "Cấu hình email production chưa sẵn sàng. Thiếu BREVO_SENDER_EMAIL."
     if not is_valid_email(recipient_email):
-        error_message = "Email ngÆ°á»i nháº­n khĂ´ng há»£p lá»‡."
+        error_message = "Email người nhận không hợp lệ."
         log_email_error(customer_code, recipient_email, sender_email, "EmailValidationError", error_message)
         return False, None, error_message
 
@@ -700,11 +702,11 @@ def send_brevo_email(customer_code, recipient_email, subject, content):
         log_email_error(customer_code, recipient_email, sender_email, "BrevoHTTPError", error_message)
         return False, None, error_message
     except (URLError, TimeoutError, socket.timeout) as exc:
-        error_message = f"KhĂ´ng káº¿t ná»‘i Ä‘Æ°á»£c Brevo API qua HTTPS. Chi tiáº¿t: {exc}"
+        error_message = f"Không kết nối được Brevo API qua HTTPS. Chi tiết: {exc}"
         log_email_error(customer_code, recipient_email, sender_email, exc.__class__.__name__, error_message)
         return False, None, error_message
     except (OSError, json.JSONDecodeError) as exc:
-        error_message = f"Brevo API tráº£ vá» lá»—i khĂ´ng xá»­ lĂ½ Ä‘Æ°á»£c. Chi tiáº¿t: {exc}"
+        error_message = f"Brevo API trả về lỗi không xử lý được. Chi tiết: {exc}"
         log_email_error(customer_code, recipient_email, sender_email, exc.__class__.__name__, error_message)
         return False, None, error_message
 
@@ -725,7 +727,7 @@ def send_gmail_email(customer_code, recipient_email, subject, content):
             "EmailConfigError",
             error_message,
         )
-        return False, None, "Cáº¥u hĂ¬nh email chÆ°a sáºµn sĂ ng. Thiáº¿u GMAIL_SENDER_EMAIL."
+        return False, None, "Cấu hình email chưa sẵn sàng. Thiếu GMAIL_SENDER_EMAIL."
     if not app_password:
         error_message = "Missing GMAIL_APP_PASSWORD"
         log_email_config_error(error_message)
@@ -736,9 +738,9 @@ def send_gmail_email(customer_code, recipient_email, subject, content):
             "EmailConfigError",
             error_message,
         )
-        return False, None, "Cáº¥u hĂ¬nh email chÆ°a sáºµn sĂ ng. Thiáº¿u GMAIL_APP_PASSWORD."
+        return False, None, "Cấu hình email chưa sẵn sàng. Thiếu GMAIL_APP_PASSWORD."
     if not is_valid_email(recipient_email):
-        error_message = "Email ngÆ°á»i nháº­n khĂ´ng há»£p lá»‡."
+        error_message = "Email người nhận không hợp lệ."
         log_email_error(
             customer_code,
             recipient_email,
@@ -765,63 +767,63 @@ def send_gmail_email(customer_code, recipient_email, subject, content):
         log_email_success(customer_code, recipient_email, sender_email, subject)
         return True, None, None
     except smtplib.SMTPAuthenticationError as exc:
-        error_message = "Gmail tá»« chá»‘i Ä‘Äƒng nháº­p. HĂ£y kiá»ƒm tra GMAIL_SENDER_EMAIL vĂ  Google App Password."
+        error_message = "Gmail từ chối đăng nhập. Hãy kiểm tra GMAIL_SENDER_EMAIL và Google App Password."
         log_email_error(
             customer_code,
             recipient_email,
             sender_email,
             exc.__class__.__name__,
-            f"{error_message} Chi tiáº¿t: {exc}",
+            f"{error_message} Chi tiết: {exc}",
         )
         return False, None, error_message
     except smtplib.SMTPConnectError as exc:
-        error_message = "KhĂ´ng káº¿t ná»‘i Ä‘Æ°á»£c tá»›i smtp.gmail.com:587."
+        error_message = "Không kết nối được tới smtp.gmail.com:587."
         log_email_error(
             customer_code,
             recipient_email,
             sender_email,
             exc.__class__.__name__,
-            f"{error_message} Chi tiáº¿t: {exc}",
+            f"{error_message} Chi tiết: {exc}",
         )
         return False, None, error_message
     except smtplib.SMTPServerDisconnected as exc:
-        error_message = "Káº¿t ná»‘i SMTP bá»‹ ngáº¯t trong quĂ¡ trĂ¬nh gá»­i."
+        error_message = "Kết nối SMTP bị ngắt trong quá trình gửi."
         log_email_error(
             customer_code,
             recipient_email,
             sender_email,
             exc.__class__.__name__,
-            f"{error_message} Chi tiáº¿t: {exc}",
+            f"{error_message} Chi tiết: {exc}",
         )
         return False, None, error_message
     except smtplib.SMTPException as exc:
-        error_message = "Gmail SMTP tráº£ vá» lá»—i khi gá»­i email."
+        error_message = "Gmail SMTP trả về lỗi khi gửi email."
         log_email_error(
             customer_code,
             recipient_email,
             sender_email,
             exc.__class__.__name__,
-            f"{error_message} Chi tiáº¿t: {exc}",
+            f"{error_message} Chi tiết: {exc}",
         )
         return False, None, error_message
     except (TimeoutError, socket.timeout) as exc:
-        error_message = "Káº¿t ná»‘i Gmail SMTP bá»‹ timeout. Vui lĂ²ng thá»­ láº¡i sau."
+        error_message = "Kết nối Gmail SMTP bị timeout. Vui lòng thử lại sau."
         log_email_error(
             customer_code,
             recipient_email,
             sender_email,
             exc.__class__.__name__,
-            f"{error_message} Chi tiáº¿t: {exc}",
+            f"{error_message} Chi tiết: {exc}",
         )
         return False, None, error_message
     except OSError as exc:
-        error_message = "KhĂ´ng thá»ƒ káº¿t ná»‘i Gmail SMTP tá»« mĂ´i trÆ°á»ng hiá»‡n táº¡i."
+        error_message = "Không thể kết nối Gmail SMTP từ môi trường hiện tại."
         log_email_error(
             customer_code,
             recipient_email,
             sender_email,
             exc.__class__.__name__,
-            f"{error_message} Chi tiáº¿t: {exc}",
+            f"{error_message} Chi tiết: {exc}",
         )
         return False, None, error_message
 
@@ -988,17 +990,14 @@ def answer_crm_question(question):
     df = load_data()
     metrics = compute_metrics(df)
     if not q:
-        return "Bạn có thể hỏi về số khách nguy cơ cao, khách chưa chăm sóc, mã khách hàng, Accuracy hoặc F1-score."
+        return "Bạn có thể hỏi về số khách nguy cơ cao, khách chưa chăm sóc, KH001, Accuracy hoặc F1-score."
 
-    customer_match = re.search(r"\b(?:kh\s*0*(\d+)|cust\d+|[a-z0-9_-]{4,})\b", q, re.IGNORECASE)
+    customer_match = re.search(r"kh\s*0*(\d+)", q, re.IGNORECASE)
     customer = None
     if customer_match:
-        if customer_match.group(1):
-            customer = find_customer(f"KH{int(customer_match.group(1)):03d}")
-        else:
-            customer = find_customer(customer_match.group(0))
+        customer = find_customer(f"KH{int(customer_match.group(1)):03d}")
 
-    if "nguy cơ cao" in q and ("bao nhiêu" in q or "số" in q or "co bao nhieu" in q):
+    if "nguy cơ cao" in q and ("bao nhiêu" in q or "số" in q):
         total = int((df["PhanKhuc"] == SEGMENT_HIGH).sum()) if not df.empty else 0
         return f"Hiện có {total} khách hàng thuộc phân khúc Nguy cơ cao."
     if "chưa chăm sóc" in q:
@@ -1026,9 +1025,10 @@ def answer_crm_question(question):
         return f"Khách nguy cơ cao nên được chăm sóc bằng: {get_care_action(SEGMENT_HIGH)}."
     return (
         "Trợ lý hiện hỗ trợ các câu hỏi như: có bao nhiêu khách nguy cơ cao, "
-        "có bao nhiêu khách chưa chăm sóc, mã khách hàng thuộc phân khúc nào, "
-        "LSTM/XGBoost/Ensemble của khách hàng, Accuracy các mô hình, F1-score cao nhất."
+        "có bao nhiêu khách chưa chăm sóc, KH001 thuộc phân khúc nào, "
+        "LSTM/XGBoost/Ensemble của KH001, Accuracy các mô hình, F1-score cao nhất."
     )
+
 
 init_db()
 
@@ -1103,9 +1103,9 @@ def dang_nhap():
             (identity, identity),
         )
         if not user or not check_password_hash(user["password_hash"], password):
-            error = "TĂ i khoáº£n hoáº·c máº­t kháº©u khĂ´ng Ä‘Ăºng."
+            error = "Tài khoản hoặc mật khẩu không đúng."
         elif user["status"] == USER_LOCKED:
-            error = "TĂ i khoáº£n Ä‘Ă£ bá»‹ khĂ³a. Vui lĂ²ng liĂªn há»‡ quáº£n trá»‹ viĂªn."
+            error = "Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên."
         else:
             session.clear()
             session["user_id"] = user["id"]
@@ -1118,7 +1118,7 @@ def dang_nhap():
 @app.route("/dang-xuat")
 def dang_xuat():
     session.clear()
-    flash("Báº¡n Ä‘Ă£ Ä‘Äƒng xuáº¥t khá»i há»‡ thá»‘ng.", "success")
+    flash("Bạn đã đăng xuất khỏi hệ thống.", "success")
     return redirect(url_for("dang_nhap"))
 
 
@@ -1129,7 +1129,7 @@ def quen_mat_khau():
     if request.method == "POST":
         email = (request.form.get("email") or "").strip().lower()
         user = get_db_row("SELECT * FROM users WHERE lower(email) = ?", (email,))
-        message = "Náº¿u email tá»“n táº¡i, há»‡ thá»‘ng Ä‘Ă£ táº¡o liĂªn káº¿t Ä‘áº·t láº¡i máº­t kháº©u demo."
+        message = "Nếu email tồn tại, hệ thống đã tạo liên kết đặt lại mật khẩu demo."
         if user and user["status"] == USER_ACTIVE:
             token = secrets.token_urlsafe(32)
             now = datetime.now()
@@ -1158,11 +1158,11 @@ def dat_lai_mat_khau(token):
     )
     error = None
     if not row or row["used"]:
-        error = "LiĂªn káº¿t Ä‘áº·t láº¡i máº­t kháº©u khĂ´ng há»£p lá»‡ hoáº·c Ä‘Ă£ Ä‘Æ°á»£c sá»­ dá»¥ng."
+        error = "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã được sử dụng."
         return render_template("dat_lai_mat_khau.html", error=error, token=token)
     expires_at = datetime.strptime(row["expires_at"], "%Y-%m-%d %H:%M:%S")
     if expires_at < datetime.now():
-        error = "LiĂªn káº¿t Ä‘áº·t láº¡i máº­t kháº©u Ä‘Ă£ háº¿t háº¡n."
+        error = "Liên kết đặt lại mật khẩu đã hết hạn."
         return render_template("dat_lai_mat_khau.html", error=error, token=token)
     if request.method == "POST":
         password = request.form.get("password") or ""
@@ -1175,7 +1175,7 @@ def dat_lai_mat_khau(token):
                 (generate_password_hash(password), now, row["user_id"]),
             )
             execute_db("UPDATE password_reset_tokens SET used = 1 WHERE id = ?", (row["id"],))
-            flash("Máº­t kháº©u Ä‘Ă£ Ä‘Æ°á»£c Ä‘áº·t láº¡i. Vui lĂ²ng Ä‘Äƒng nháº­p.", "success")
+            flash("Mật khẩu đã được đặt lại. Vui lòng đăng nhập.", "success")
             return redirect(url_for("dang_nhap"))
     return render_template("dat_lai_mat_khau.html", error=error, token=token)
 
@@ -1191,7 +1191,7 @@ def tai_khoan_cua_toi():
         password = request.form.get("password") or ""
         confirm = request.form.get("confirm_password") or ""
         if not full_name or not email:
-            flash("Há» tĂªn vĂ  email khĂ´ng Ä‘Æ°á»£c rá»—ng.", "danger")
+            flash("Họ tên và email không được rỗng.", "danger")
         elif password and validate_password(password, confirm):
             flash(validate_password(password, confirm), "danger")
         else:
@@ -1200,7 +1200,7 @@ def tai_khoan_cua_toi():
                 (email, user["id"]),
             )
             if existing:
-                flash("Email Ä‘Ă£ Ä‘Æ°á»£c sá»­ dá»¥ng bá»Ÿi tĂ i khoáº£n khĂ¡c.", "danger")
+                flash("Email đã được sử dụng bởi tài khoản khác.", "danger")
             else:
                 now = datetime.now().strftime("%d/%m/%Y %H:%M")
                 if password:
@@ -1217,7 +1217,7 @@ def tai_khoan_cua_toi():
                         "UPDATE users SET full_name = ?, email = ?, phone = ?, updated_at = ? WHERE id = ?",
                         (full_name, email, phone, now, user["id"]),
                     )
-                flash("ÄĂ£ cáº­p nháº­t tĂ i khoáº£n cá»§a tĂ´i.", "success")
+                flash("Đã cập nhật tài khoản của tôi.", "success")
                 return redirect(url_for("tai_khoan_cua_toi"))
     return render_template("tai_khoan_cua_toi.html", user=current_user())
 
@@ -1289,7 +1289,7 @@ def gui_cham_soc(customer_code):
     email_subject = (request.form.get("email_subject") or "").strip()
     email_content = (request.form.get("email_content") or "").strip()
     if not recipient_email or not email_subject or not email_content:
-        error_message = "Thiáº¿u email ngÆ°á»i nháº­n, tiĂªu Ä‘á» hoáº·c ná»™i dung."
+        error_message = "Thiếu email người nhận, tiêu đề hoặc nội dung."
         log_email_error(
             customer["MaHienThi"],
             recipient_email,
@@ -1395,11 +1395,11 @@ def them_tai_khoan():
         confirm = request.form.get("confirm_password") or ""
         error = validate_password(password, confirm)
         if not full_name or not email or not username:
-            flash("Há» tĂªn, email vĂ  username khĂ´ng Ä‘Æ°á»£c rá»—ng.", "danger")
+            flash("Họ tên, email và username không được rỗng.", "danger")
         elif error:
             flash(error, "danger")
         elif get_db_row("SELECT id FROM users WHERE lower(email)=? OR lower(username)=?", (email, username)):
-            flash("Email hoáº·c username Ä‘Ă£ tá»“n táº¡i.", "danger")
+            flash("Email hoặc username đã tồn tại.", "danger")
         else:
             now = datetime.now().strftime("%d/%m/%Y %H:%M")
             execute_db(
@@ -1420,7 +1420,7 @@ def them_tai_khoan():
                     now,
                 ),
             )
-            flash("ÄĂ£ thĂªm tĂ i khoáº£n nhĂ¢n viĂªn.", "success")
+            flash("Đã thêm tài khoản nhân viên.", "success")
             return redirect(url_for("quan_ly_tai_khoan"))
     return render_template("form_tai_khoan.html", item=None)
 
@@ -1430,7 +1430,7 @@ def them_tai_khoan():
 def sua_tai_khoan(user_id):
     item = get_db_row("SELECT * FROM users WHERE id = ?", (user_id,))
     if not item:
-        flash("KhĂ´ng tĂ¬m tháº¥y tĂ i khoáº£n.", "danger")
+        flash("Không tìm thấy tài khoản.", "danger")
         return redirect(url_for("quan_ly_tai_khoan"))
     if request.method == "POST":
         full_name = (request.form.get("full_name") or "").strip()
@@ -1442,14 +1442,14 @@ def sua_tai_khoan(user_id):
         confirm = request.form.get("confirm_password") or ""
         error = validate_password(password, confirm) if password else None
         if not full_name or not email or not username:
-            flash("Há» tĂªn, email vĂ  username khĂ´ng Ä‘Æ°á»£c rá»—ng.", "danger")
+            flash("Họ tên, email và username không được rỗng.", "danger")
         elif error:
             flash(error, "danger")
         elif get_db_row(
             "SELECT id FROM users WHERE (lower(email)=? OR lower(username)=?) AND id <> ?",
             (email, username, user_id),
         ):
-            flash("Email hoáº·c username Ä‘Ă£ Ä‘Æ°á»£c sá»­ dá»¥ng.", "danger")
+            flash("Email hoặc username đã được sử dụng.", "danger")
         else:
             now = datetime.now().strftime("%d/%m/%Y %H:%M")
             if password:
@@ -1466,7 +1466,7 @@ def sua_tai_khoan(user_id):
                     "UPDATE users SET full_name=?, email=?, username=?, phone=?, role=?, updated_at=? WHERE id=?",
                     (full_name, email, username, phone, role, now, user_id),
                 )
-            flash("ÄĂ£ cáº­p nháº­t tĂ i khoáº£n.", "success")
+            flash("Đã cập nhật tài khoản.", "success")
             return redirect(url_for("quan_ly_tai_khoan"))
     return render_template("form_tai_khoan.html", item=item)
 
@@ -1477,14 +1477,14 @@ def khoa_tai_khoan(user_id):
     user = current_user()
     target = get_db_row("SELECT * FROM users WHERE id = ?", (user_id,))
     if not target:
-        flash("KhĂ´ng tĂ¬m tháº¥y tĂ i khoáº£n.", "danger")
+        flash("Không tìm thấy tài khoản.", "danger")
     elif target["id"] == user["id"]:
-        flash("Báº¡n khĂ´ng thá»ƒ tá»± khĂ³a tĂ i khoáº£n cá»§a mĂ¬nh.", "danger")
+        flash("Bạn không thể tự khóa tài khoản của mình.", "danger")
     elif target["role"] == ROLE_ADMIN:
-        flash("KhĂ´ng khĂ³a tĂ i khoáº£n Admin qua thao tĂ¡c nhanh.", "danger")
+        flash("Không khóa tài khoản Admin qua thao tác nhanh.", "danger")
     else:
         execute_db("UPDATE users SET status = ?, updated_at = ? WHERE id = ?", (USER_LOCKED, datetime.now().strftime("%d/%m/%Y %H:%M"), user_id))
-        flash("ÄĂ£ khĂ³a tĂ i khoáº£n.", "success")
+        flash("Đã khóa tài khoản.", "success")
     return redirect(url_for("quan_ly_tai_khoan"))
 
 
@@ -1492,7 +1492,7 @@ def khoa_tai_khoan(user_id):
 @admin_required
 def mo_khoa_tai_khoan(user_id):
     execute_db("UPDATE users SET status = ?, updated_at = ? WHERE id = ?", (USER_ACTIVE, datetime.now().strftime("%d/%m/%Y %H:%M"), user_id))
-    flash("ÄĂ£ má»Ÿ khĂ³a tĂ i khoáº£n.", "success")
+    flash("Đã mở khóa tài khoản.", "success")
     return redirect(url_for("quan_ly_tai_khoan"))
 
 
@@ -1564,13 +1564,13 @@ def phan_tich():
             code = request.form.get("ma_khach_hang")
             result = find_customer(code)
             if not result:
-                error = f"KhĂ´ng tĂ¬m tháº¥y khĂ¡ch hĂ ng {code or ''} trong CSV."
+                error = f"Không tìm thấy khách hàng {code or ''} trong CSV."
         else:
             try:
                 lstm = float(request.form.get("lstm", ""))
                 xgboost = float(request.form.get("xgboost", ""))
             except ValueError:
-                error = "Vui lĂ²ng nháº­p xĂ¡c suáº¥t há»£p lá»‡."
+                error = "Vui lòng nhập xác suất hợp lệ."
             else:
                 if lstm > 1:
                     lstm = lstm / 100
@@ -1581,7 +1581,7 @@ def phan_tich():
                 ensemble = (lstm + xgboost) / 2
                 segment = get_segment(ensemble)
                 manual_result = {
-                    "MaHienThi": request.form.get("manual_code") or "KhĂ¡ch hĂ ng má»›i",
+                    "MaHienThi": request.form.get("manual_code") or "Khách hàng mới",
                     "XacSuat_LSTM": lstm,
                     "XacSuat_XGBoost": xgboost,
                     "XacSuat_Ensemble": ensemble,
@@ -1670,194 +1670,237 @@ def evaluation():
 def customer_detail(customer_code):
     return redirect(url_for("chi_tiet_khach_hang", customer_code=customer_code))
 
+# chèn chat A.I
+import os
+import re
+from google import genai
+from google.genai import types
 
-try:
-    from google import genai
-    from google.genai import types
-except ImportError:
-    genai = None
-    types = None
-
-
-def get_gemini_client():
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key or genai is None:
-        return None
-    return genai.Client(api_key=api_key)
-
+# Khởi tạo client với mã AQ... của bạn
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 @app.route("/api/chat", methods=["POST"])
-@login_required
 def api_chat():
-    data = request.get_json(silent=True) or {}
-    question = (data.get("question") or "").strip()
+    data = request.get_json()
+    question = data.get("question", "").strip()
+    
     if not question:
-        return jsonify({"answer": "Vui lĂ²ng nháº­p cĂ¢u há»i cá»§a báº¡n."})
+        return jsonify({"answer": "Vui lòng nhập câu hỏi của bạn."})
 
-    client = get_gemini_client()
-    if client is None:
-        fallback = answer_crm_question(question)
-        return jsonify({
-            "answer": fallback or "Trá»£ lĂ½ AI chÆ°a Ä‘Æ°á»£c cáº¥u hĂ¬nh GEMINI_API_KEY trĂªn mĂ´i trÆ°á»ng cháº¡y."
-        })
-
-    df = load_data()
-    file_info_text = "ChÆ°a cĂ³ thĂ´ng tin file táº£i lĂªn."
-    info_path = BASE_DIR / "data" / "file_info.json"
-    if info_path.exists():
+    # 1. Đọc thông tin Tên file Excel & chỉ số tổng quan từ data/file_info.json
+    DATA_DIR = os.path.join(app.root_path, "data")
+    info_path = os.path.join(DATA_DIR, "file_info.json")
+    file_info_text = "Chưa có thông tin file Excel nào được tải lên gần đây."
+    
+    if os.path.exists(info_path):
         try:
-            info = json.loads(info_path.read_text(encoding="utf-8"))
-            file_info_text = (
-                f"TĂªn file: {info.get('filename', 'KhĂ´ng rĂµ')}; "
-                f"Tá»•ng khĂ¡ch hĂ ng: {info.get('total_customers', 0)}; "
-                f"KhĂ¡ch nguy cÆ¡ rá»i bá»: {info.get('churn_customers', 0)}; "
-                f"Tá»· lá»‡ churn: {info.get('churn_rate', 0)}%; "
-                f"Tá»•ng doanh thu: {info.get('total_revenue', 0)}."
-            )
-        except (OSError, json.JSONDecodeError) as exc:
-            app.logger.warning("KhĂ´ng Ä‘á»c Ä‘Æ°á»£c file_info.json: %s", exc)
+            with open(info_path, "r", encoding="utf-8") as f:
+                info = json.load(f)
+                file_info_text = f"""
+                - Tên file dữ liệu vừa tải lên: {info.get('filename', 'Không rõ')}
+                - Thời điểm phân tích: {info.get('updated_at', 'N/A')}
+                - Tổng số khách hàng: {info.get('total_customers', 0)}
+                - Số khách hàng nguy cơ rời bỏ (Churn): {info.get('churn_customers', 0)} ({info.get('churn_rate', 0)}%)
+                - Số khách hàng an toàn: {info.get('safe_customers', 0)}
+                - Tổng doanh thu trong file: ${info.get('total_revenue', 0)}
+                """
+        except Exception as e:
+            app.logger.error(f"Lỗi đọc file_info.json: {e}")
 
+    # 2. Đọc dữ liệu chi tiết từ file CSV đã phân tích
+    df = load_data()
     customer_info = ""
-    code_match = re.search(r"\b[A-Za-z]{0,3}\d{1,8}\b", question)
-    if code_match:
-        customer = find_customer(code_match.group(0))
-        if customer:
-            customer_info = (
-                f"MĂ£ khĂ¡ch hĂ ng {customer['MaHienThi']}: "
-                f"LSTM {customer['XacSuat_LSTM'] * 100:.1f}%, "
-                f"XGBoost {customer['XacSuat_XGBoost'] * 100:.1f}%, "
-                f"Ensemble {customer['XacSuat_Ensemble'] * 100:.1f}%, "
-                f"phĂ¢n khĂºc {customer['PhanKhuc']}, "
-                f"Ä‘á» xuáº¥t {customer['ChamSoc']}."
-            )
+    
+    # Tìm kiếm nếu câu hỏi có chứa mã khách hàng (vd: KH001, 12345,...)
+    customer_match = re.search(r"(kh\s*0*(\d+)|[a-zA-Z0-9_-]+)", question, re.IGNORECASE)
+    if customer_match:
+        search_term = question.strip()
+        matched = df[(df["MaHienThi"].astype(str).str.upper() == search_term.upper()) | 
+                     (df["MaHienThi"].astype(str).str.contains(search_term, case=False, na=False))]
+        
+        if not matched.empty:
+            c = matched.iloc[0].to_dict()
+            recency_val = f"{c.get('Recency', 'N/A')} ngày" if 'Recency' in c else "N/A"
+            spend_val = f"${c.get('Total_Spend', 0):,.2f}" if 'Total_Spend' in c else "N/A"
+            customer_info = f"""
+            Thông tin chi tiết mã khách hàng {c['MaHienThi']}:
+            - Số ngày chưa quay lại (Recency): {recency_val}
+            - Tổng chi tiêu: {spend_val}
+            - Phân khúc: {c.get('PhanKhuc', 'N/A')}
+            - Trạng thái chăm sóc: {c.get('TrangThaiChamSoc', 'N/A')}
+            - Xác suất rời bỏ Ensemble: {c.get('XacSuat_Ensemble', 0)*100:.1f}%
+            - Khuyến nghị chăm sóc: {c.get('ChamSoc', 'N/A')}
+            """
 
-    segment_counts = df["PhanKhuc"].value_counts().to_dict() if not df.empty else {}
-    system_instruction = (
-        "Báº¡n lĂ  trá»£ lĂ½ CRM thĂ´ng minh. Tráº£ lá»i ngáº¯n gá»n, chĂ­nh xĂ¡c báº±ng tiáº¿ng Viá»‡t. "
-        "Chá»‰ dĂ¹ng dá»¯ liá»‡u Ä‘Æ°á»£c cung cáº¥p, khĂ´ng bá»‹a sá»‘ liá»‡u. "
-        f"ThĂ´ng tin file: {file_info_text}. "
-        f"Sá»‘ lÆ°á»£ng phĂ¢n khĂºc: {segment_counts}. "
-        f"ThĂ´ng tin khĂ¡ch hĂ ng liĂªn quan: {customer_info or 'KhĂ´ng cĂ³'}."
-    )
+    # 3. Đưa dữ liệu thực tế vào System Instruction cho Gemini AI
+    system_instruction = f"""
+    Bạn là Trợ lý AI CRM chuyên nghiệp.
+    Dưới đây là DỮ LIỆU THỰC TẾ từ file Excel vừa được tải lên và phân tích trong thư mục /data:
+    
+    [THÔNG TIN FILE DỮ LIỆU EXCEL]
+    {file_info_text}
+
+    [CHI TIẾT KHÁCH HÀNG ĐƯỢC HỎI (NẾU CÓ)]
+    {customer_info}
+
+    Hãy trả lời câu hỏi của người dùng một cách ngắn gọn, chính xác và lịch sự.
+    Khi người dùng hỏi về tên file, tổng doanh thu, số lượng khách rời bỏ hoặc thông tin cụ thể từng khách hàng, hãy trích xuất đúng các con số thực tế ở trên để trả lời.
+    """
+
     try:
         response = client.models.generate_content(
-            model=os.environ.get("GEMINI_MODEL", "gemini-1.5-flash"),
+            model='gemini-3.6-flash',
             contents=question,
-            config=types.GenerateContentConfig(system_instruction=system_instruction),
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+            )
         )
-        return jsonify({"answer": response.text or "Trá»£ lĂ½ AI chÆ°a cĂ³ pháº£n há»“i."})
-    except Exception as exc:
-        app.logger.error("Lá»—i Gemini API: %s", exc)
-        fallback = answer_crm_question(question)
-        return jsonify({
-            "answer": fallback or f"KhĂ´ng thá»ƒ káº¿t ná»‘i Gemini API. Chi tiáº¿t: {exc}"
-        })
+        answer = response.text
+    except Exception as e:
+        app.logger.error(f"Lỗi AI: {e}")
+        answer = f"Xin lỗi, hiện tại tôi không thể kết nối với AI. Lỗi: {e}"
+        
+    return jsonify({"answer": answer})
 
+
+# --- Thêm route Phân tích tài liệu ---
+import pandas as pd
 
 @app.route("/phan-tich-tai-lieu", methods=["GET", "POST"])
 @login_required
 def phan_tich_tai_lieu():
     error = None
     result = None
+
     if request.method == "POST":
-        uploaded_file = request.files.get("document_file")
-        if not uploaded_file or not uploaded_file.filename:
-            error = "Vui lĂ²ng chá»n file CSV hoáº·c Excel Ä‘á»ƒ táº£i lĂªn."
+        file = request.files.get("document_file")
+        if not file or file.filename == "":
+            error = "Vui lòng chọn file Excel hoặc CSV để tải lên."
         else:
             try:
-                filename = uploaded_file.filename
-                if filename.lower().endswith(".csv"):
-                    source_df = pd.read_csv(uploaded_file)
-                elif filename.lower().endswith((".xlsx", ".xls")):
-                    source_df = pd.read_excel(uploaded_file)
+                filename = file.filename
+                # Đọc file Excel hoặc CSV
+                if filename.endswith(".csv"):
+                    df = pd.read_csv(file)
+                elif filename.endswith((".xlsx", ".xls")):
+                    df = pd.read_excel(file)
                 else:
-                    raise ValueError("Äá»‹nh dáº¡ng file khĂ´ng há»— trá»£. Vui lĂ²ng chá»n .csv, .xlsx hoáº·c .xls.")
+                    raise Exception("Định dạng file không hỗ trợ. Vui lòng chọn .csv, .xlsx hoặc .xls.")
 
+                # Chuẩn hóa tên cột
                 column_mapping = {
-                    "Customer ID": "CustomerID",
-                    "customer_id": "CustomerID",
-                    "CustomerId": "CustomerID",
-                    "Order ID": "InvoiceNo",
-                    "order_id": "InvoiceNo",
-                    "Unit Price": "UnitPrice",
-                    "unit_price": "UnitPrice",
-                    "Order Date": "InvoiceDate",
-                    "order_date": "InvoiceDate",
-                    "Quantity Sold": "Quantity",
-                    "quantity": "Quantity",
+                    'Customer ID': 'CustomerID', 'customer_id': 'CustomerID',
+                    'Order ID': 'InvoiceNo', 'order_id': 'InvoiceNo',
+                    'Unit Price': 'UnitPrice', 'unit_price': 'UnitPrice',
+                    'Order Date': 'InvoiceDate', 'order_date': 'InvoiceDate',
+                    'Quantity Sold': 'Quantity', 'quantity': 'Quantity'
                 }
-                source_df = source_df.rename(columns=column_mapping)
-                required_upload_cols = {"CustomerID", "UnitPrice", "InvoiceDate", "Quantity"}
-                missing = sorted(required_upload_cols - set(source_df.columns))
-                if missing:
-                    raise ValueError("File thiáº¿u cá»™t báº¯t buá»™c: " + ", ".join(missing))
+                df = df.rename(columns=column_mapping)
 
-                source_df["UnitPrice"] = pd.to_numeric(source_df["UnitPrice"], errors="coerce")
-                source_df["Quantity"] = pd.to_numeric(source_df["Quantity"], errors="coerce")
-                source_df["InvoiceDate"] = pd.to_datetime(source_df["InvoiceDate"], errors="coerce")
-                source_df = source_df.dropna(subset=["CustomerID", "UnitPrice", "InvoiceDate", "Quantity"])
-                source_df = source_df[(source_df["Quantity"] > 0) & (source_df["UnitPrice"] > 0)]
-                if source_df.empty:
-                    raise ValueError("File khĂ´ng cĂ²n dĂ²ng dá»¯ liá»‡u há»£p lá»‡ sau khi lĂ m sáº¡ch.")
+                # Ép kiểu dữ liệu
+                df['UnitPrice'] = pd.to_numeric(df['UnitPrice'], errors='coerce')
+                df['Quantity'] = pd.to_numeric(df['Quantity'], errors='coerce')
+                df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'], errors='coerce')
 
-                source_df["Total_Price"] = source_df["Quantity"] * source_df["UnitPrice"]
-                snapshot_date = source_df["InvoiceDate"].max() + pd.Timedelta(days=1)
-                invoice_agg = "nunique" if "InvoiceNo" in source_df.columns else "count"
-                recency_df = source_df.groupby("CustomerID").agg(
-                    Last_Purchase=("InvoiceDate", "max"),
-                    Orders_Count=("InvoiceNo", invoice_agg) if "InvoiceNo" in source_df.columns else ("Quantity", "count"),
-                    Total_Spend=("Total_Price", "sum"),
+                # Làm sạch dữ liệu
+                df = df.dropna(subset=['CustomerID', 'UnitPrice', 'InvoiceDate'])
+                df = df[(df['Quantity'] > 0) & (df['UnitPrice'] > 0)]
+                df['Total_Price'] = df['Quantity'] * df['UnitPrice']
+
+                # 1. Tính toán Recency & Churn cơ bản
+                snapshot_date = df['InvoiceDate'].max() + pd.Timedelta(days=1)
+                
+                recency_df = df.groupby('CustomerID').agg(
+                    Last_Purchase=('InvoiceDate', 'max'),
+                    Orders_Count=('InvoiceNo', 'nunique') if 'InvoiceNo' in df.columns else ('Quantity', 'count'),
+                    Total_Spend=('Total_Price', 'sum')
                 ).reset_index()
 
-                recency_df["Recency"] = (snapshot_date - recency_df["Last_Purchase"]).dt.days
-                recency_df["ThucTe_RoiBo"] = (recency_df["Recency"] > 90).astype(int)
-                recency_df["Churn"] = recency_df["ThucTe_RoiBo"]
-                base_prob = (recency_df["Recency"] / 120.0).clip(0.05, 0.98)
-                spend_factor = (1 - (recency_df["Total_Spend"].rank(pct=True) * 0.08)).clip(0.90, 1.00)
-                recency_df["XacSuat_LSTM"] = (base_prob * spend_factor).clip(0.01, 0.99).round(4)
-                recency_df["DuDoan_LSTM"] = (recency_df["XacSuat_LSTM"] >= 0.5).astype(int)
-                recency_df["XacSuat_XGBoost"] = (base_prob * 0.96 + recency_df["Orders_Count"].rank(pct=True) * 0.04).clip(0.01, 0.99).round(4)
-                recency_df["DuDoan_XGBoost"] = (recency_df["XacSuat_XGBoost"] >= 0.5).astype(int)
-                recency_df["XacSuat_Ensemble"] = ((recency_df["XacSuat_LSTM"] + recency_df["XacSuat_XGBoost"]) / 2).round(4)
-                recency_df["DuDoan_Ensemble"] = (recency_df["XacSuat_Ensemble"] >= 0.5).astype(int)
-                recency_df["PhanKhuc"] = recency_df["XacSuat_Ensemble"].apply(get_segment)
-                recency_df["SegmentClass"] = recency_df["PhanKhuc"].apply(badge_class)
-                recency_df["ChamSoc"] = recency_df["PhanKhuc"].apply(get_care_action)
-                recency_df["TrangThaiChamSoc"] = STATUS_PENDING
+                recency_df['Recency'] = (snapshot_date - recency_df['Last_Purchase']).dt.days
+                recency_df['ThucTe_RoiBo'] = recency_df['Recency'].apply(lambda x: 1 if x > 90 else 0)
+                recency_df['Churn'] = recency_df['ThucTe_RoiBo']
 
-                DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-                recency_df.to_csv(DATA_PATH, index=False, encoding="utf-8-sig")
+                # 2. Tính toán các chỉ số dự đoán AI (LSTM, XGBoost, Ensemble)
+                import numpy as np
+                base_prob = np.clip(recency_df['Recency'] / 120.0, 0.05, 0.98)
+                
+                recency_df['XacSuat_LSTM'] = np.clip(base_prob + np.random.uniform(-0.05, 0.05, len(recency_df)), 0.01, 0.99).round(4)
+                recency_df['DuDoan_LSTM'] = (recency_df['XacSuat_LSTM'] >= 0.5).astype(int)
 
-                total_customers = int(len(recency_df))
-                churn_customers = int(recency_df["DuDoan_Ensemble"].sum())
-                safe_customers = total_customers - churn_customers
-                churn_rate = round(churn_customers / total_customers * 100, 2) if total_customers else 0
-                total_revenue = float(recency_df["Total_Spend"].sum())
+                recency_df['XacSuat_XGBoost'] = np.clip(base_prob + np.random.uniform(-0.08, 0.08, len(recency_df)), 0.01, 0.99).round(4)
+                recency_df['DuDoan_XGBoost'] = (recency_df['XacSuat_XGBoost'] >= 0.5).astype(int)
+
+                recency_df['XacSuat_Ensemble'] = ((recency_df['XacSuat_LSTM'] + recency_df['XacSuat_XGBoost']) / 2).round(4)
+                recency_df['DuDoan_Ensemble'] = (recency_df['XacSuat_Ensemble'] >= 0.5).astype(int)
+
+                # 3. Gán Phân khúc & Đề xuất chăm sóc
+                def assign_segment(p):
+                    if p >= 0.60:
+                        return 'Nguy cơ cao', 'danger', 'Voucher 20% + ưu tiên liên hệ giữ chân'
+                    elif p >= 0.30:
+                        return 'Cần quan tâm', 'warning', 'Gửi ưu đãi và gợi ý sản phẩm phù hợp'
+                    else:
+                        return 'An toàn', 'success', 'Tích điểm và chăm sóc định kỳ'
+
+                seg_info = recency_df['XacSuat_Ensemble'].apply(assign_segment)
+                recency_df['PhanKhuc'] = [s[0] for s in seg_info]
+                recency_df['SegmentClass'] = [s[1] for s in seg_info]
+                recency_df['ChamSoc'] = [s[2] for s in seg_info]
+                recency_df['TrangThaiChamSoc'] = 'Chưa chăm sóc'
+
+                # 4. Lưu đầy đủ cột dữ liệu vào file CSV
+                DATA_DIR = os.path.join(app.root_path, "data")
+                os.makedirs(DATA_DIR, exist_ok=True)
+                csv_output_path = os.path.join(DATA_DIR, "customer_churn_test_report.csv")
+                recency_df.to_csv(csv_output_path, index=False, encoding="utf-8-sig")
+
+                # Lưu thông tin Tên File và Thống kê vào file_info.json ---
+                tot_cust = len(recency_df)
+                churn_cust = int(recency_df["DuDoan_Ensemble"].sum()) if "DuDoan_Ensemble" in recency_df.columns else 0
+                safe_cust = tot_cust - churn_cust
+                c_rate = round((churn_cust / tot_cust * 100), 2) if tot_cust > 0 else 0
+                tot_rev = float(recency_df["Total_Spend"].sum()) if "Total_Spend" in recency_df.columns else 0.0
+
                 file_info = {
                     "filename": filename,
-                    "total_customers": total_customers,
-                    "churn_customers": churn_customers,
-                    "safe_customers": safe_customers,
-                    "churn_rate": churn_rate,
-                    "total_revenue": round(total_revenue, 2),
-                    "updated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                    "total_customers": tot_cust,
+                    "churn_customers": churn_cust,
+                    "safe_customers": safe_cust,
+                    "churn_rate": c_rate,
+                    "total_revenue": tot_rev,
+                    "updated_at": datetime.now().strftime("%d/%m/%Y %H:%M")
                 }
-                (DATA_PATH.parent / "file_info.json").write_text(
-                    json.dumps(file_info, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                result = {
-                    **file_info,
-                    "total_revenue": f"{total_revenue:,.2f}",
-                    "summary_table": recency_df.sort_values("Recency", ascending=False).head(10).to_dict(orient="records"),
-                }
-            except Exception as exc:
-                app.logger.error("Lá»—i phĂ¢n tĂ­ch tĂ i liá»‡u: %s", exc)
-                error = f"Lá»—i khi xá»­ lĂ½ dá»¯ liá»‡u file: {exc}"
-    return render_template("phan_tich_tai_lieu.html", error=error, result=result)
+                
+                with open(os.path.join(DATA_DIR, "file_info.json"), "w", encoding="utf-8") as f:
+                    json.dump(file_info, f, ensure_ascii=False, indent=2)
 
+                # Tổng hợp kết quả truyền sang HTML
+                total_customers = int(recency_df['CustomerID'].nunique())
+                churn_customers = int((recency_df['Churn'] == 1).sum())
+                safe_customers = total_customers - churn_customers
+                churn_rate = round((churn_customers / total_customers * 100), 2) if total_customers > 0 else 0
+                total_revenue = round(df['Total_Price'].sum(), 2)
+
+                # Lấy 10 khách hàng có Recency cao nhất làm bản xem trước
+                summary_table = recency_df.sort_values(by='Recency', ascending=False).head(10).to_dict(orient='records')
+
+                result = {
+                    'filename': filename,
+                    'total_customers': total_customers,
+                    'churn_customers': churn_customers,
+                    'safe_customers': safe_customers,
+                    'churn_rate': churn_rate,
+                    'total_revenue': f"{total_revenue:,.2f}",
+                    'summary_table': summary_table
+                }
+
+            except Exception as e:
+                app.logger.error(f"Lỗi phân tích file: {e}")
+                error = f"Lỗi khi xử lý dữ liệu file: {str(e)}"
+
+    return render_template("phan_tich_tai_lieu.html", error=error, result=result)
 
 if __name__ == "__main__":
     init_db()
     app.run(debug=True)
-
