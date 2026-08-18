@@ -1799,18 +1799,41 @@ client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
-    question = request.json.get('question')
+    data = request.get_json(silent=True) or {}
+    question = data.get('question', '').strip()
 
+    # PHẢI CÓ NGAY Ở ĐẦU HÀM
+    system_instruction = """
+Bạn là Trợ lý AI của hệ thống CRM Thông Minh.
+Hãy trả lời bằng tiếng Việt, rõ ràng và ngắn gọn.
+Hỗ trợ phân tích khách hàng, dự đoán rời bỏ, phân khúc,
+chăm sóc khách hàng và chiến dịch giữ chân.
+"""
 
-    
+    if not question:
+        return jsonify({'answer': 'Vui lòng nhập câu hỏi.'}), 400
+
+    if client is None:
+        return jsonify({
+            'answer': 'Chưa cấu hình GEMINI_API_KEY.'
+        }), 500
+
     try:
         response = client.models.generate_content(
             model='gemini-3.6-flash',
             contents=question,
             config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
+                system_instruction=system_instruction
             )
         )
+
+        return jsonify({'answer': response.text})
+
+    except Exception as e:
+        print(f"--- LỖI API CHÍNH XÁC: {e} ---")
+        return jsonify({
+            'answer': f'Lỗi backend: {str(e)}'
+        }), 500
         return jsonify({'answer': response.text})
         
     except Exception as e:
