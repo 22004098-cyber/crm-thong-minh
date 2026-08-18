@@ -8,7 +8,7 @@
 
 <div class="modern-card mb-4"><div class="card-body">
     <div class="row g-3">
-        <div class="col-lg-4"><input type="text" id="searchInput" class="form-control" placeholder="Tìm mã khách hàng, ví dụ KH001"></div>
+        <div class="col-lg-4"><input type="text" id="searchInput" class="form-control" placeholder="Tìm mã hoặc tên khách hàng..."></div>
         <div class="col-lg-3"><select id="filterSelect" class="form-select"><option value="all">Tất cả</option><option value="churn">Khách hàng rời bỏ</option><option value="safe">Không rời bỏ</option></select></div>
         <div class="col-lg-3"><select id="modelFilter" class="form-select"><option value="ensemble">Theo Ensemble</option><option value="lstm">Theo LSTM</option><option value="xgb">Theo XGBoost</option></select></div>
         <div class="col-lg-2"><button type="button" id="resetBtn" class="btn btn-outline-secondary w-100">Đặt lại</button></div>
@@ -18,12 +18,13 @@
 <div class="modern-card"><div class="card-body">
     <div class="table-responsive">
         <table class="table table-hover align-middle">
-            <thead><tr><th>STT</th><th>Mã KH</th><th>Thực tế</th><th>Xác suất LSTM</th><th>Dự đoán LSTM</th><th>Xác suất XGBoost</th><th>Dự đoán XGBoost</th><th>Ensemble</th><th>Kết quả Ensemble</th><th>Chi tiết</th></tr></thead>
+            <thead><tr><th>STT</th><th>Mã KH</th><th>Tên Khách hàng</th><th>Thực tế</th><th>Xác suất LSTM</th><th>Dự đoán LSTM</th><th>Xác suất XGBoost</th><th>Dự đoán XGBoost</th><th>Ensemble</th><th>Kết quả Ensemble</th><th>Chi tiết</th></tr></thead>
             <tbody>
             {% for c in customers %}
-            <tr class="customer-row" data-customer="{{ c.MaHienThi }}" data-lstm="{{ c.DuDoan_LSTM }}" data-xgb="{{ c.DuDoan_XGBoost }}" data-ensemble="{{ c.DuDoan_Ensemble }}">
+            <tr class="customer-row" data-customer="{{ c.MaHienThi }}" data-name="{{ c.TenKhachHang or c.CustomerName or '' }}" data-lstm="{{ c.DuDoan_LSTM }}" data-xgb="{{ c.DuDoan_XGBoost }}" data-ensemble="{{ c.DuDoan_Ensemble }}">
                 <td>{{ loop.index }}</td>
                 <td class="fw-bold">{{ c.MaHienThi }}</td>
+                <td>{{ c.TenKhachHang or c.CustomerName or '—' }}</td>
                 <td>{% if c.ThucTe_RoiBo == 1 %}<span class="badge bg-danger">Rời bỏ</span>{% else %}<span class="badge bg-success">Không rời bỏ</span>{% endif %}</td>
                 <td><div class="progress"><div class="progress-bar bg-purple" data-value="{{ c.XacSuat_LSTM * 100 }}">{{ "%.1f"|format(c.XacSuat_LSTM * 100) }}%</div></div></td>
                 <td>{% if c.DuDoan_LSTM == 1 %}<span class="badge bg-danger">Churn</span>{% else %}<span class="badge bg-success">Không churn</span>{% endif %}</td>
@@ -34,7 +35,7 @@
                 <td><a class="btn btn-outline-primary btn-sm" href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">Xem</a></td>
             </tr>
             {% else %}
-            <tr><td colspan="10" class="text-center text-muted">Chưa có dữ liệu hợp lệ.</td></tr>
+            <tr><td colspan="11" class="text-center text-muted">Chưa có dữ liệu hợp lệ.</td></tr>
             {% endfor %}
             </tbody>
         </table>
@@ -54,7 +55,7 @@ function filterCustomers() {
     const model = modelFilter.value;
     rows.forEach((row) => {
         const pred = Number(row.dataset[model]);
-        const matchSearch = row.dataset.customer.toLowerCase().includes(keyword);
+        const matchSearch = row.dataset.customer.toLowerCase().includes(keyword) || (row.dataset.name && row.dataset.name.toLowerCase().includes(keyword));
         const matchFilter = filter === "all" || (filter === "churn" && pred === 1) || (filter === "safe" && pred === 0);
         row.style.display = matchSearch && matchFilter ? "" : "none";
     });

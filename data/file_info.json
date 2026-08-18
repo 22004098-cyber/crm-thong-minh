@@ -1,9 +1,9 @@
 {
-  "filename": "Amazon_selected_columns_RandomFilled.csv",
-  "total_customers": 43233,
-  "churn_customers": 40112,
-  "safe_customers": 3121,
-  "churn_rate": 92.78,
-  "total_revenue": 91021212.99,
-  "updated_at": "16/08/2026 23:26"
+  "filename": "amazon_sales_data_2025_RandomFilled.csv",
+  "total_customers": 250,
+  "churn_customers": 237,
+  "safe_customers": 13,
+  "churn_rate": 94.8,
+  "total_revenue": 243845.0,
+  "updated_at": "18/08/2026 16:19"
 }

@@ -18,7 +18,7 @@
 
 <div class="modern-card mb-4"><div class="card-body">
     <div class="row g-3">
-        <div class="col-lg-4"><input type="text" id="searchCare" class="form-control" placeholder="Tìm mã khách hàng"></div>
+        <div class="col-lg-4"><input type="text" id="searchCare" class="form-control" placeholder="Tìm mã hoặc tên khách hàng"></div>
         <div class="col-lg-3"><select id="segmentFilter" class="form-select"><option value="all">Tất cả phân khúc</option><option value="{{ SEGMENT_HIGH }}">Nguy cơ cao</option><option value="{{ SEGMENT_MEDIUM }}">Cần quan tâm</option><option value="{{ SEGMENT_SAFE }}">An toàn</option></select></div>
         <div class="col-lg-3"><select id="statusFilter" class="form-select"><option value="all">Tất cả trạng thái</option><option value="{{ STATUS_PENDING }}">Chưa chăm sóc</option><option value="{{ STATUS_DONE }}">Đã chăm sóc</option></select></div>
         <div class="col-lg-2"><button type="button" id="resetCare" class="btn btn-outline-secondary w-100">Đặt lại</button></div>
@@ -28,12 +28,13 @@
 <div class="modern-card"><div class="card-body">
     <div class="table-responsive">
         <table class="table table-hover align-middle">
-            <thead><tr><th>STT</th><th>Mã KH</th><th>Nguy cơ</th><th>Phân khúc</th><th>Đề xuất</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+            <thead><tr><th>STT</th><th>Mã KH</th><th>Tên KH</th><th>Nguy cơ</th><th>Phân khúc</th><th>Đề xuất</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
             <tbody>
             {% for c in customers %}
-            <tr class="care-row" data-customer="{{ c.MaHienThi }}" data-segment="{{ c.PhanKhuc }}" data-status="{{ c.TrangThaiChamSoc }}">
+            <tr class="care-row" data-customer="{{ c.MaHienThi }}" data-name="{{ c.TenKhachHang or c.CustomerName or '' }}" data-segment="{{ c.PhanKhuc }}" data-status="{{ c.TrangThaiChamSoc }}">
                 <td>{{ loop.index }}</td>
                 <td class="fw-bold"><a href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">{{ c.MaHienThi }}</a></td>
+                <td>{{ c.TenKhachHang or c.CustomerName or '—' }}</td>
                 <td class="fw-bold">{{ "%.1f"|format(c.XacSuat_Ensemble * 100) }}%</td>
                 <td><span class="badge bg-{{ c.SegmentClass }} {% if c.SegmentClass == 'warning' %}text-dark{% endif %}">{{ c.PhanKhuc }}</span></td>
                 <td>{{ c.ChamSoc }}</td>
@@ -47,7 +48,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="7" class="text-center text-muted">Chưa có dữ liệu hợp lệ.</td></tr>
+            <tr><td colspan="8" class="text-center text-muted">Chưa có dữ liệu hợp lệ.</td></tr>
             {% endfor %}
             </tbody>
         </table>
@@ -58,11 +59,12 @@
     <h5 class="section-title">Lịch sử chăm sóc gần đây</h5>
     <div class="table-responsive">
         <table class="table table-hover align-middle">
-            <thead><tr><th>Mã KH</th><th>Phân khúc</th><th>Email</th><th>Tiêu đề</th><th>Trạng thái</th><th>Thời gian</th></tr></thead>
+            <thead><tr><th>Mã KH</th><th>Tên KH</th><th>Phân khúc</th><th>Email</th><th>Tiêu đề</th><th>Trạng thái</th><th>Thời gian</th></tr></thead>
             <tbody>
             {% for h in history %}
             <tr>
                 <td class="fw-bold">{{ h.customer_code }}</td>
+                <td>{{ h.customer_name or h.TenKhachHang or '—' }}</td>
                 <td>{{ h.segment }}</td>
                 <td>{{ h.recipient_email or "Chưa có" }}</td>
                 <td>{{ h.subject or h.email_subject or h.action }}</td>
@@ -72,7 +74,7 @@
                 <td>{{ h.sent_at or h.updated_at }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="6" class="text-center text-muted">Chưa có lịch sử chăm sóc.</td></tr>
+            <tr><td colspan="7" class="text-center text-muted">Chưa có lịch sử chăm sóc.</td></tr>
             {% endfor %}
             </tbody>
         </table>
@@ -91,7 +93,7 @@ function filterCare() {
     const segment = segmentFilter.value;
     const status = statusFilter.value;
     careRows.forEach((row) => {
-        const okSearch = row.dataset.customer.toLowerCase().includes(keyword);
+        const okSearch = row.dataset.customer.toLowerCase().includes(keyword) || (row.dataset.name && row.dataset.name.toLowerCase().includes(keyword));
         const okSegment = segment === "all" || row.dataset.segment === segment;
         const okStatus = status === "all" || row.dataset.status === status;
         row.style.display = okSearch && okSegment && okStatus ? "" : "none";

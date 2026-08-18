@@ -12,7 +12,7 @@
 
 <div class="modern-card mb-4"><div class="card-body">
     <div class="row g-3">
-        <div class="col-md-6"><input type="text" id="searchSegment" class="form-control" placeholder="Tìm mã khách hàng"></div>
+        <div class="col-md-6"><input type="text" id="searchSegment" class="form-control" placeholder="Tìm mã hoặc tên khách hàng">
         <div class="col-md-4"><select id="segmentFilter" class="form-select"><option value="all">Tất cả phân khúc</option><option value="{{ SEGMENT_HIGH }}">Nguy cơ cao</option><option value="{{ SEGMENT_MEDIUM }}">Cần quan tâm</option><option value="{{ SEGMENT_SAFE }}">An toàn</option></select></div>
         <div class="col-md-2"><button type="button" id="segmentReset" class="btn btn-outline-secondary w-100">Đặt lại</button></div>
     </div>
@@ -21,18 +21,29 @@
 <div class="modern-card"><div class="card-body">
     <div class="table-responsive">
         <table class="table table-hover align-middle">
-            <thead><tr><th>STT</th><th>Mã khách hàng</th><th>Xác suất tổng hợp</th><th>Phân khúc</th><th>Chiến lược CRM</th><th>Chi tiết</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>STT</th>
+                    <th>Mã khách hàng</th>
+                    <th>Tên khách hàng</th> 
+                    <th>Xác suất tổng hợp</th>
+                    <th>Phân khúc</th>
+                    <th>Chiến lược CRM</th>
+                    <th>Chi tiết</th>
+                </tr>
+            </thead>
             <tbody>
             {% for c in customers %}
-            <tr class="segment-row" data-customer="{{ c.MaHienThi }}" data-segment="{{ c.PhanKhuc }}">
-                <td>{{ loop.index }}</td><td class="fw-bold">{{ c.MaHienThi }}</td>
-                <td class="fw-bold text-ensemble">{{ "%.1f"|format(c.XacSuat_Ensemble * 100) }}%</td>
+            <tr class="segment-row" data-customer="{{ c.MaHienThi }}" data-name="{{ c.TenKhachHang or c.CustomerName or '' }}" data-segment="{{ c.PhanKhuc }}">
+                <td>{{ loop.index }}</td>
+                <td class="fw-bold">{{ c.MaHienThi }}</td>
+                <td>{{ c.TenKhachHang or c.CustomerName or 'N/A' }}</td> <td class="fw-bold text-ensemble">{{ "%.1f"|format(c.XacSuat_Ensemble * 100) }}%</td>
                 <td><span class="badge bg-{{ c.SegmentClass }} {% if c.SegmentClass == 'warning' %}text-dark{% endif %}">{{ c.PhanKhuc }}</span></td>
                 <td>{{ c.ChamSoc }}</td>
                 <td><a class="btn btn-outline-primary btn-sm" href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">Xem</a></td>
             </tr>
             {% else %}
-            <tr><td colspan="6" class="text-center text-muted">Chưa có dữ liệu hợp lệ.</td></tr>
+            <tr><td colspan="7" class="text-center text-muted">Chưa có dữ liệu hợp lệ.</td></tr>
             {% endfor %}
             </tbody>
         </table>
@@ -49,7 +60,10 @@ function filterSegments() {
     const keyword = searchSegment.value.trim().toLowerCase();
     const selected = segmentFilter.value;
     segmentRows.forEach((row) => {
-        const matchSearch = row.dataset.customer.toLowerCase().includes(keyword);
+        const matchCode = (row.dataset.customer || "").toLowerCase().includes(keyword);
+        const matchName = (row.dataset.name || "").toLowerCase().includes(keyword);
+        const matchSearch = matchCode || matchName; // Tìm theo Mã HOẶC Tên
+        
         const matchSegment = selected === "all" || row.dataset.segment === selected;
         row.style.display = matchSearch && matchSegment ? "" : "none";
     });

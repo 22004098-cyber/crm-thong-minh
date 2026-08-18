@@ -14,14 +14,20 @@
             <h5 class="section-title">Tra cứu khách hàng trong CSV</h5>
             <form method="POST">
                 <input type="hidden" name="mode" value="lookup">
-                <label class="form-label">Mã khách hàng</label>
+                <label class="form-label">Mã hoặc Tên khách hàng</label>
                 <div class="input-group mb-3">
-                    <input list="customerList" type="text" name="ma_khach_hang" class="form-control" placeholder="Ví dụ: KH001" required>
+                    <input list="customerList" type="text" name="ma_khach_hang" class="form-control" placeholder="Ví dụ: KH001 hoặc Nguyễn Văn A" required>
                     <button class="btn btn-primary" type="submit">Phân tích</button>
                 </div>
                 <datalist id="customerList">
                     {% for c in customers %}
-                    <option value="{{ c.MaHienThi }}">{{ c.PhanKhuc }}</option>
+                    <!-- Gợi ý theo Mã khách hàng -->
+                    <option value="{{ c.MaHienThi }}">{{ c.TenKhachHang or c.CustomerName or c.MaHienThi }} - {{ c.PhanKhuc }}</option>
+                    <!-- Gợi ý theo Tên khách hàng -->
+                    {% set name = c.TenKhachHang or c.CustomerName %}
+                    {% if name and name != 'N/A' %}
+                    <option value="{{ name }}">{{ c.MaHienThi }} - {{ c.PhanKhuc }}</option>
+                    {% endif %}
                     {% endfor %}
                 </datalist>
             </form>
@@ -45,7 +51,15 @@
         {% if item %}
         <div class="modern-card"><div class="card-body">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-                <div><h5 class="section-title mb-1">Kết quả phân tích</h5><p class="text-muted mb-0">Mã khách hàng: <strong>{{ item.MaHienThi }}</strong></p></div>
+                <div>
+                    <h5 class="section-title mb-1">Kết quả phân tích</h5>
+                    <p class="text-muted mb-0">
+                        Mã khách hàng: <strong>{{ item.MaHienThi }}</strong>
+                        {% if item.TenKhachHang or item.CustomerName %}
+                        | Tên khách hàng: <strong>{{ item.TenKhachHang or item.CustomerName }}</strong>
+                        {% endif %}
+                    </p>
+                </div>
                 <span class="badge bg-{{ item.SegmentClass }} {% if item.SegmentClass == 'warning' %}text-dark{% endif %} fs-6">{{ item.PhanKhuc }}</span>
             </div>
             <div class="row g-3">

@@ -17,7 +17,7 @@
 <section class="profile-hero mb-4">
     <div>
         <p class="mb-1">Hồ sơ khách hàng</p>
-        <h2>{{ customer.MaHienThi }}</h2>
+        <h2>{{ customer.MaHienThi }} - {{ customer.TenKhachHang or customer.CustomerName or 'Chưa có tên' }}</h2>
     </div>
     <span class="badge bg-{{ customer.SegmentClass }} {% if customer.SegmentClass == 'warning' %}text-dark{% endif %} fs-6">{{ customer.PhanKhuc }}</span>
 </section>
@@ -61,7 +61,7 @@
                 <input type="hidden" name="next" value="{{ url_for('chi_tiet_khach_hang', customer_code=customer.MaHienThi) }}">
                 <div class="mb-3">
                     <label class="form-label">Email khách hàng</label>
-                    <input type="email" name="recipient_email" class="form-control" placeholder="khachhang@example.com" required>
+                    <input type="email" name="recipient_email" class="form-control" value="{{ customer.Email or customer.email or customer.CustomerEmail or '' }}" placeholder="khachhang@example.com" required>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Tiêu đề</label>

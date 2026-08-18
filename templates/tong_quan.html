@@ -55,11 +55,12 @@
         </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle">
-                <thead><tr><th>Mã KH</th><th>LSTM</th><th>XGBoost</th><th>Ensemble</th><th>Phân khúc</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead>
+                <thead><tr><th>Mã KH</th><th>Tên Khách hàng</th><th>LSTM</th><th>XGBoost</th><th>Ensemble</th><th>Phân khúc</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead>
                 <tbody>
                 {% for c in top_risk %}
                 <tr>
                     <td class="fw-bold">{{ c.MaHienThi }}</td>
+                    <td>{{ c.TenKhachHang or c.CustomerName or '—' }}</td>
                     <td>{{ "%.1f"|format(c.XacSuat_LSTM * 100) }}%</td>
                     <td>{{ "%.1f"|format(c.XacSuat_XGBoost * 100) }}%</td>
                     <td class="fw-bold text-ensemble">{{ "%.1f"|format(c.XacSuat_Ensemble * 100) }}%</td>
@@ -68,7 +69,7 @@
                     <td><a class="btn btn-outline-primary btn-sm" href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">Xem</a></td>
                 </tr>
                 {% else %}
-                <tr><td colspan="7" class="text-center text-muted">Chưa có dữ liệu hợp lệ.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted">Chưa có dữ liệu hợp lệ.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

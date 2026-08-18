@@ -50,11 +50,24 @@
 <div class="modern-card"><div class="card-body">
     <div class="table-responsive">
         <table class="table table-hover align-middle">
-            <thead><tr><th>Mã KH</th><th>LSTM</th><th>XGBoost</th><th>Ensemble</th><th>Phân khúc</th><th>Đề xuất CRM</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>Mã KH</th>
+                    <th>Tên khách hàng</th> 
+                    <th>LSTM</th>
+                    <th>XGBoost</th>
+                    <th>Ensemble</th>
+                    <th>Phân khúc</th>
+                    <th>Đề xuất CRM</th>
+                    <th>Trạng thái</th>
+                    <th>Chi tiết</th>
+                </tr>
+            </thead>
             <tbody>
             {% for c in customers %}
             <tr>
                 <td class="fw-bold">{{ c.MaHienThi }}</td>
+                <td>{{ c.TenKhachHang or c.CustomerName or 'N/A' }}</td> <!-- Hiển thị tên khách hàng[cite: 9] -->
                 <td>{{ "%.1f"|format(c.XacSuat_LSTM * 100) }}%</td>
                 <td>{{ "%.1f"|format(c.XacSuat_XGBoost * 100) }}%</td>
                 <td class="fw-bold">{{ "%.1f"|format(c.XacSuat_Ensemble * 100) }}%</td>
@@ -64,7 +77,7 @@
                 <td><a class="btn btn-outline-primary btn-sm" href="{{ url_for('chi_tiet_khach_hang', customer_code=c.MaHienThi) }}">Xem</a></td>
             </tr>
             {% else %}
-            <tr><td colspan="8" class="text-center text-muted">Không có khách hàng phù hợp bộ lọc.</td></tr>
+            <tr><td colspan="9" class="text-center text-muted">Không có khách hàng phù hợp bộ lọc.</td></tr>
             {% endfor %}
             </tbody>
         </table>

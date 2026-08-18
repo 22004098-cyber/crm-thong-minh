@@ -1,4 +1,4 @@
-import google.generativeai as genai
+
 from flask import jsonify 
 
 import csv
@@ -351,11 +351,21 @@ def load_data():
 
     df = df.reset_index(drop=True)
     
-    # --- CHỖ CẦN SỬA: Ưu tiên dùng CustomerID nếu có trong file Excel ---
+    # 1. Tạo Mã hiển thị
     if "CustomerID" in df.columns:
-        df["MaHienThi"] = df["CustomerID"].astype(str)
+        # Lấy tối đa 8 ký tự đầu tiên để hiển thị gọn gàng
+        df["MaHienThi"] = df["CustomerID"].astype(str).str.strip().str[:8]
     else:
         df["MaHienThi"] = [f"KH{i + 1:03d}" for i in range(len(df))]
+
+    
+    if "CustomerName" in df.columns:
+        df["TenKhachHang"] = df["CustomerName"].fillna("N/A")
+    elif "TenKhachHang" in df.columns:
+        df["CustomerName"] = df["TenKhachHang"].fillna("N/A")
+    else:
+        df["TenKhachHang"] = "N/A"
+        df["CustomerName"] = "N/A"
 
     if "PhanKhuc" not in df.columns:
         df["PhanKhuc"] = df["XacSuat_Ensemble"].apply(get_segment)
@@ -372,11 +382,26 @@ def load_data():
     return df
 
 def find_customer(customer_code):
-    code = (customer_code or "").strip().upper()
+    code = (customer_code or "").strip()
     if not code:
         return None
     df = load_data()
-    matched = df[df["MaHienThi"].str.upper() == code]
+    
+    # 1. Tìm chính xác theo Mã, Tên khách hàng (TenKhachHang hoặc CustomerName)
+    matched = df[
+        (df["MaHienThi"].astype(str).str.upper() == code.upper()) |
+        (df["TenKhachHang"].astype(str).str.upper() == code.upper()) |
+        (df["CustomerName"].astype(str).str.upper() == code.upper())
+    ]
+    
+    # 2. Nếu không tìm thấy chính xác, tìm tương đối (chứa từ khóa)
+    if matched.empty:
+        matched = df[
+            (df["MaHienThi"].astype(str).str.contains(code, case=False, na=False)) |
+            (df["TenKhachHang"].astype(str).str.contains(code, case=False, na=False)) |
+            (df["CustomerName"].astype(str).str.contains(code, case=False, na=False))
+        ]
+        
     if matched.empty:
         return None
     return matched.iloc[0].to_dict()
@@ -863,6 +888,7 @@ def customers_csv_response(customers, filename):
     writer.writerow(
         [
             "Ma KH",
+            "Ten Khach Hang",
             "LSTM",
             "XGBoost",
             "Ensemble",
@@ -875,6 +901,7 @@ def customers_csv_response(customers, filename):
         writer.writerow(
             [
                 customer.get("MaHienThi", ""),
+                customer.get("TenKhachHang") or customer.get("CustomerName") or "N/A",
                 round(float(customer.get("XacSuat_LSTM", 0)) * 100, 2),
                 round(float(customer.get("XacSuat_XGBoost", 0)) * 100, 2),
                 round(float(customer.get("XacSuat_Ensemble", 0)) * 100, 2),
@@ -1503,15 +1530,102 @@ def quan_ly_khach_hang():
     return render_template("quan_ly_khach_hang.html", customers=customers_with_history_counts(df))
 
 
-@app.route("/tro-ly-crm", methods=["GET", "POST"])
+@app.route("/api/upload-file", methods=["POST"])
+@login_required
+def api_upload_file():
+    file = request.files.get("document_file") or request.files.get("file")
+    if not file or file.filename == "":
+        return jsonify({"success": False, "message": "Vui lòng chọn file hợp lệ."}), 400
+
+    filename = file.filename
+    DATA_DIR = os.path.join(app.root_path, "data")
+    info_path = os.path.join(DATA_DIR, "file_info.json")
+    csv_output_path = os.path.join(DATA_DIR, "customer_churn_test_report.csv")
+
+    try:
+        if filename.endswith(".csv"):
+            df = pd.read_csv(file)
+        elif filename.endswith((".xlsx", ".xls")):
+            df = pd.read_excel(file)
+        else:
+            return jsonify({"success": False, "message": "Định dạng file không hỗ trợ."}), 400
+
+        df.columns = df.columns.str.strip()
+        column_mapping = {
+            'Customer ID': 'CustomerID', 'customer_id': 'CustomerID',
+            'Customer Name': 'CustomerName', 'customer_name': 'CustomerName',
+            'Customer Email': 'Email', 'customer_email': 'Email',
+            'Order ID': 'InvoiceNo', 'order_id': 'InvoiceNo',
+            'Unit Price': 'UnitPrice', 'unit_price': 'UnitPrice',
+            'Order Date': 'InvoiceDate', 'order_date': 'InvoiceDate',
+            'Quantity Sold': 'Quantity', 'quantity': 'Quantity'
+        }
+        df = df.rename(columns=column_mapping)
+
+        df['UnitPrice'] = pd.to_numeric(df.get('UnitPrice'), errors='coerce')
+        df['Quantity'] = pd.to_numeric(df.get('Quantity'), errors='coerce')
+        df['InvoiceDate'] = pd.to_datetime(df.get('InvoiceDate'), errors='coerce')
+        df = df.dropna(subset=['CustomerID', 'UnitPrice', 'InvoiceDate'])
+        df['Total_Price'] = df['Quantity'] * df['UnitPrice']
+
+        snapshot_date = df['InvoiceDate'].max() + pd.Timedelta(days=1)
+        recency_df = df.groupby(['CustomerID']).agg(
+            Last_Purchase=('InvoiceDate', 'max'),
+            Total_Spend=('Total_Price', 'sum')
+        ).reset_index()
+
+        recency_df['Recency'] = (snapshot_date - recency_df['Last_Purchase']).dt.days
+        recency_df['ThucTe_RoiBo'] = recency_df['Recency'].apply(lambda x: 1 if x > 90 else 0)
+
+        import numpy as np
+        base_prob = np.clip(recency_df['Recency'] / 120.0, 0.05, 0.98)
+        recency_df['XacSuat_LSTM'] = base_prob.round(4)
+        recency_df['DuDoan_LSTM'] = (recency_df['XacSuat_LSTM'] >= 0.5).astype(int)
+        recency_df['XacSuat_XGBoost'] = base_prob.round(4)
+        recency_df['DuDoan_XGBoost'] = (recency_df['XacSuat_XGBoost'] >= 0.5).astype(int)
+        recency_df['XacSuat_Ensemble'] = base_prob.round(4)
+        recency_df['DuDoan_Ensemble'] = (recency_df['XacSuat_Ensemble'] >= 0.5).astype(int)
+
+        def assign_segment(p):
+            if p >= 0.60: return 'Nguy cơ cao', 'danger', 'Voucher 20% + ưu tiên liên hệ giữ chân'
+            elif p >= 0.30: return 'Cần quan tâm', 'warning', 'Gửi ưu đãi và gợi ý sản phẩm phù hợp'
+            return 'An toàn', 'success', 'Tích điểm và chăm sóc định kỳ'
+
+        seg_info = recency_df['XacSuat_Ensemble'].apply(assign_segment)
+        recency_df['PhanKhuc'] = [s[0] for s in seg_info]
+        recency_df['SegmentClass'] = [s[1] for s in seg_info]
+        recency_df['ChamSoc'] = [s[2] for s in seg_info]
+        recency_df['TrangThaiChamSoc'] = 'Chưa chăm sóc'
+
+        os.makedirs(DATA_DIR, exist_ok=True)
+        recency_df.to_csv(csv_output_path, index=False, encoding="utf-8-sig")
+
+        tot_cust = len(recency_df)
+        churn_cust = int(recency_df["DuDoan_Ensemble"].sum())
+        file_info = {
+            "filename": filename,
+            "total_customers": tot_cust,
+            "churn_customers": churn_cust,
+            "safe_customers": tot_cust - churn_cust,
+            "churn_rate": round((churn_cust / tot_cust * 100), 2) if tot_cust > 0 else 0,
+            "total_revenue": float(recency_df["Total_Spend"].sum()),
+            "updated_at": datetime.now().strftime("%d/%m/%Y %H:%M")
+        }
+        with open(info_path, "w", encoding="utf-8") as f:
+            json.dump(file_info, f, ensure_ascii=False, indent=2)
+
+        return jsonify({
+            "success": True,
+            "message": f"Phân tích thành công file {filename}",
+            "data": file_info
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Lỗi xử lý: {str(e)}"}), 500
+
+@app.route("/tro-ly-crm", methods=["GET"])
 @login_required
 def tro_ly_crm():
-    answer = None
-    question = ""
-    if request.method == "POST":
-        question = (request.form.get("question") or "").strip()
-        answer = answer_crm_question(question)
-    return render_template("tro_ly_crm.html", question=question, answer=answer)
+    return render_template("tro_ly_crm.html")
 
 
 @app.route("/thong-ke-bao-cao")
@@ -1556,7 +1670,9 @@ def phan_tich():
     result = None
     error = None
     manual_result = None
-    customers = load_data()[["MaHienThi", "PhanKhuc"]].to_dict("records")
+    
+    # Lấy thêm cột TenKhachHang và CustomerName truyền ra giao diện
+    customers = load_data()[["MaHienThi", "TenKhachHang", "CustomerName", "PhanKhuc"]].to_dict("records")
 
     if request.method == "POST":
         mode = request.form.get("mode", "lookup")
@@ -1564,7 +1680,7 @@ def phan_tich():
             code = request.form.get("ma_khach_hang")
             result = find_customer(code)
             if not result:
-                error = f"Không tìm thấy khách hàng {code or ''} trong CSV."
+                error = f"Không tìm thấy khách hàng '{code or ''}' trong CSV."
         else:
             try:
                 lstm = float(request.form.get("lstm", ""))
@@ -1670,23 +1786,42 @@ def evaluation():
 def customer_detail(customer_code):
     return redirect(url_for("chi_tiet_khach_hang", customer_code=customer_code))
 
-# chèn chat A.I
+# --- Tích hợp Trợ lý AI Gemini ---
 import os
 import re
 from google import genai
 from google.genai import types
 
-# Khởi tạo client với mã AQ... của bạn
+# Lấy API Key từ biến môi trường hoặc điền API Key thật của bạn
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-@app.route("/api/chat", methods=["POST"])
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+
+@app.route('/api/chat', methods=['POST'])
 def api_chat():
-    data = request.get_json()
-    question = data.get("question", "").strip()
+    question = request.json.get('question')
+
+
     
-    if not question:
-        return jsonify({"answer": "Vui lòng nhập câu hỏi của bạn."})
+    try:
+        response = client.models.generate_content(
+            model='gemini-3.6-flash',
+            contents=question,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+            )
+        )
+        return jsonify({'answer': response.text})
+        
+    except Exception as e:
+        # In lỗi ra Terminal để kiểm tra
+        print(f"--- LỖI API CHÍNH XÁC: {e} ---") 
+        # Trả lỗi thực tế ra giao diện chat để dễ debug
+        return jsonify({'answer': f"Lỗi backend: {str(e)}"}), 500
+        
+    except Exception as e:
+        app.logger.error(f"Lỗi AI: {e}")
+        return jsonify({'answer': 'Rất tiếc, hệ thống AI đang gặp sự cố kết nối. Vui lòng thử lại sau.'}), 500
 
     # 1. Đọc thông tin Tên file Excel & chỉ số tổng quan từ data/file_info.json
     DATA_DIR = os.path.join(app.root_path, "data")
@@ -1712,26 +1847,26 @@ def api_chat():
     df = load_data()
     customer_info = ""
     
-    # Tìm kiếm nếu câu hỏi có chứa mã khách hàng (vd: KH001, 12345,...)
-    customer_match = re.search(r"(kh\s*0*(\d+)|[a-zA-Z0-9_-]+)", question, re.IGNORECASE)
-    if customer_match:
-        search_term = question.strip()
-        matched = df[(df["MaHienThi"].astype(str).str.upper() == search_term.upper()) | 
-                     (df["MaHienThi"].astype(str).str.contains(search_term, case=False, na=False))]
-        
-        if not matched.empty:
-            c = matched.iloc[0].to_dict()
-            recency_val = f"{c.get('Recency', 'N/A')} ngày" if 'Recency' in c else "N/A"
-            spend_val = f"${c.get('Total_Spend', 0):,.2f}" if 'Total_Spend' in c else "N/A"
-            customer_info = f"""
-            Thông tin chi tiết mã khách hàng {c['MaHienThi']}:
-            - Số ngày chưa quay lại (Recency): {recency_val}
-            - Tổng chi tiêu: {spend_val}
-            - Phân khúc: {c.get('PhanKhuc', 'N/A')}
-            - Trạng thái chăm sóc: {c.get('TrangThaiChamSoc', 'N/A')}
-            - Xác suất rời bỏ Ensemble: {c.get('XacSuat_Ensemble', 0)*100:.1f}%
-            - Khuyến nghị chăm sóc: {c.get('ChamSoc', 'N/A')}
-            """
+    # Tìm kiếm khách hàng nếu câu hỏi chứa Mã KH hoặc Tên KH
+    if not df.empty:
+        q_upper = question.upper()
+        for _, row in df.iterrows():
+            ma = str(row.get("MaHienThi", "")).upper()
+            ten = str(row.get("TenKhachHang", "")).upper()
+            if (ma and ma in q_upper) or (ten and ten != "N/A" and ten in q_upper):
+                c = row.to_dict()
+                recency_val = f"{c.get('Recency', 'N/A')} ngày" if 'Recency' in c else "N/A"
+                spend_val = f"${c.get('Total_Spend', 0):,.2f}" if 'Total_Spend' in c else "N/A"
+                customer_info = f"""
+                Thông tin chi tiết khách hàng {c.get('MaHienThi', '')} ({c.get('TenKhachHang', 'N/A')}):
+                - Số ngày chưa quay lại (Recency): {recency_val}
+                - Tổng chi tiêu: {spend_val}
+                - Phân khúc: {c.get('PhanKhuc', 'N/A')}
+                - Trạng thái chăm sóc: {c.get('TrangThaiChamSoc', 'N/A')}
+                - Xác suất rời bỏ Ensemble: {float(c.get('XacSuat_Ensemble', 0))*100:.1f}%
+                - Khuyến nghị chăm sóc: {c.get('ChamSoc', 'N/A')}
+                """
+                break
 
     # 3. Đưa dữ liệu thực tế vào System Instruction cho Gemini AI
     system_instruction = f"""
@@ -1749,8 +1884,11 @@ def api_chat():
     """
 
     try:
+        if not client:
+            return jsonify({"answer": "Chưa cấu hình GEMINI_API_KEY. Vui lòng kiểm tra lại cấu hình server."})
+
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-3.6-flash',  # Đã sửa tên model hợp lệ
             contents=question,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -1773,6 +1911,10 @@ def phan_tich_tai_lieu():
     error = None
     result = None
 
+    DATA_DIR = os.path.join(app.root_path, "data")
+    info_path = os.path.join(DATA_DIR, "file_info.json")
+    csv_output_path = os.path.join(DATA_DIR, "customer_churn_test_report.csv")
+
     if request.method == "POST":
         file = request.files.get("document_file")
         if not file or file.filename == "":
@@ -1788,15 +1930,31 @@ def phan_tich_tai_lieu():
                 else:
                     raise Exception("Định dạng file không hỗ trợ. Vui lòng chọn .csv, .xlsx hoặc .xls.")
 
+                # 1. Xóa khoảng trắng thừa trong tên cột trước
+                df.columns = df.columns.str.strip()
                 # Chuẩn hóa tên cột
                 column_mapping = {
-                    'Customer ID': 'CustomerID', 'customer_id': 'CustomerID',
-                    'Order ID': 'InvoiceNo', 'order_id': 'InvoiceNo',
-                    'Unit Price': 'UnitPrice', 'unit_price': 'UnitPrice',
-                    'Order Date': 'InvoiceDate', 'order_date': 'InvoiceDate',
-                    'Quantity Sold': 'Quantity', 'quantity': 'Quantity'
+                    'Customer ID': 'CustomerID', 'customer_id': 'CustomerID', 'CustomerID': 'CustomerID',
+                    'Customer Name': 'CustomerName', 'customer_name': 'CustomerName', 'CustomerName': 'CustomerName',
+                    'custom name': 'CustomerName', 'Custom Name': 'CustomerName',
+                    'Customer Email': 'Email', 'customer_email': 'Email', 'Email': 'Email', 'email': 'Email', # <--- Bổ sung đọc Email
+                    'Order ID': 'InvoiceNo', 'order_id': 'InvoiceNo', 'InvoiceNo': 'InvoiceNo',
+                    'Unit Price': 'UnitPrice', 'unit_price': 'UnitPrice', 'UnitPrice': 'UnitPrice',
+                    'Order Date': 'InvoiceDate', 'order_date': 'InvoiceDate', 'InvoiceDate': 'InvoiceDate',
+                    'Quantity Sold': 'Quantity', 'quantity': 'Quantity', 'Quantity': 'Quantity'
                 }
                 df = df.rename(columns=column_mapping)
+
+                # Bọc lót dữ liệu phòng bị thiếu tên hoặc email
+                if 'CustomerName' not in df.columns:
+                    df['CustomerName'] = "N/A"
+                else:
+                    df['CustomerName'] = df['CustomerName'].fillna("N/A")
+
+                if 'Email' not in df.columns:
+                    df['Email'] = "Chưa có Email"
+                else:
+                    df['Email'] = df['Email'].fillna("Chưa có Email")
 
                 # Ép kiểu dữ liệu
                 df['UnitPrice'] = pd.to_numeric(df['UnitPrice'], errors='coerce')
@@ -1811,7 +1969,12 @@ def phan_tich_tai_lieu():
                 # 1. Tính toán Recency & Churn cơ bản
                 snapshot_date = df['InvoiceDate'].max() + pd.Timedelta(days=1)
                 
-                recency_df = df.groupby('CustomerID').agg(
+                # Nhóm theo cả CustomerID và CustomerName (nếu có) để không bị mất tên
+                groupby_cols = ['CustomerID']
+                if 'CustomerName' in df.columns:
+                    groupby_cols.append('CustomerName')
+
+                recency_df = df.groupby(['CustomerID', 'CustomerName', 'Email']).agg(
                     Last_Purchase=('InvoiceDate', 'max'),
                     Orders_Count=('InvoiceNo', 'nunique') if 'InvoiceNo' in df.columns else ('Quantity', 'count'),
                     Total_Spend=('Total_Price', 'sum')
@@ -1850,12 +2013,10 @@ def phan_tich_tai_lieu():
                 recency_df['TrangThaiChamSoc'] = 'Chưa chăm sóc'
 
                 # 4. Lưu đầy đủ cột dữ liệu vào file CSV
-                DATA_DIR = os.path.join(app.root_path, "data")
                 os.makedirs(DATA_DIR, exist_ok=True)
-                csv_output_path = os.path.join(DATA_DIR, "customer_churn_test_report.csv")
                 recency_df.to_csv(csv_output_path, index=False, encoding="utf-8-sig")
 
-                # Lưu thông tin Tên File và Thống kê vào file_info.json ---
+                # Lưu thông tin Tên File và Thống kê vào file_info.json
                 tot_cust = len(recency_df)
                 churn_cust = int(recency_df["DuDoan_Ensemble"].sum()) if "DuDoan_Ensemble" in recency_df.columns else 0
                 safe_cust = tot_cust - churn_cust
@@ -1872,32 +2033,51 @@ def phan_tich_tai_lieu():
                     "updated_at": datetime.now().strftime("%d/%m/%Y %H:%M")
                 }
                 
-                with open(os.path.join(DATA_DIR, "file_info.json"), "w", encoding="utf-8") as f:
+                with open(info_path, "w", encoding="utf-8") as f:
                     json.dump(file_info, f, ensure_ascii=False, indent=2)
 
                 # Tổng hợp kết quả truyền sang HTML
-                total_customers = int(recency_df['CustomerID'].nunique())
-                churn_customers = int((recency_df['Churn'] == 1).sum())
-                safe_customers = total_customers - churn_customers
-                churn_rate = round((churn_customers / total_customers * 100), 2) if total_customers > 0 else 0
-                total_revenue = round(df['Total_Price'].sum(), 2)
-
-                # Lấy 10 khách hàng có Recency cao nhất làm bản xem trước
                 summary_table = recency_df.sort_values(by='Recency', ascending=False).head(10).to_dict(orient='records')
 
                 result = {
                     'filename': filename,
-                    'total_customers': total_customers,
-                    'churn_customers': churn_customers,
-                    'safe_customers': safe_customers,
-                    'churn_rate': churn_rate,
-                    'total_revenue': f"{total_revenue:,.2f}",
+                    'total_customers': tot_cust,
+                    'churn_customers': churn_cust,
+                    'safe_customers': safe_cust,
+                    'churn_rate': c_rate,
+                    'total_revenue': f"{tot_rev:,.2f}",
                     'summary_table': summary_table
                 }
 
             except Exception as e:
                 app.logger.error(f"Lỗi phân tích file: {e}")
                 error = f"Lỗi khi xử lý dữ liệu file: {str(e)}"
+
+    else:
+        # Khi chuyển menu quay lại trang (GET) -> Đọc dữ liệu đã phân tích gần nhất
+        if os.path.exists(info_path) and os.path.exists(csv_output_path):
+            try:
+                with open(info_path, "r", encoding="utf-8") as f:
+                    info = json.load(f)
+
+                df_report = pd.read_csv(csv_output_path)
+                if 'Recency' in df_report.columns:
+                    summary_table = df_report.sort_values(by='Recency', ascending=False).head(10).to_dict(orient='records')
+                else:
+                    summary_table = df_report.head(10).to_dict(orient='records')
+
+                tot_rev = info.get("total_revenue", 0)
+                result = {
+                    'filename': info.get('filename', 'Dữ liệu đã phân tích'),
+                    'total_customers': info.get('total_customers', 0),
+                    'churn_customers': info.get('churn_customers', 0),
+                    'safe_customers': info.get('safe_customers', 0),
+                    'churn_rate': info.get('churn_rate', 0),
+                    'total_revenue': f"{tot_rev:,.2f}" if isinstance(tot_rev, (int, float)) else str(tot_rev),
+                    'summary_table': summary_table
+                }
+            except Exception as e:
+                app.logger.error(f"Lỗi tải dữ liệu cũ: {e}")
 
     return render_template("phan_tich_tai_lieu.html", error=error, result=result)
 

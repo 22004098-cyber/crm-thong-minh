@@ -1,12 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Trợ lý CRM AI - {{ APP_NAME }}{% endblock %}
+
 {% block content %}
-<section class="page-heading">
+<section class="page-heading mb-3">
     <div>
         <h2>Trợ lý CRM (AI)</h2>
-        <p>Hỏi đáp trực tiếp với AI về khách hàng, phân khúc, chăm sóc và chiến lược.</p>
+        <p>Hỏi đáp trực tiếp với AI về khách hàng, phân khúc, chăm sóc và chiến lược từ dữ liệu CSV/Excel.</p>
     </div>
 </section>
+
+<!-- KHU VỰC TẢI FILE CSV / EXCEL TRỰC TIẾP -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card bg-dark text-white border-secondary shadow-sm">
+            <div class="card-body p-3">
+                <div class="row align-items-center g-2">
+                    <div class="col-md-3">
+                        <label for="csv-file-input" class="form-label mb-0 fw-bold text-info">
+                            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Chọn file dữ liệu (.csv, .xlsx):
+                        </label>
+                    </div>
+                    <div class="col-md-6">
+                        <input type="file" id="csv-file-input" class="form-control bg-dark text-white border-secondary form-control-sm" accept=".csv, .xlsx, .xls">
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-sm btn-success w-100 fw-bold" id="btn-upload-file" type="button">
+                            <i class="bi bi-cpu me-1"></i> Tải & Phân tích dữ liệu
+                        </button>
+                    </div>
+                </div>
+                <!-- Badge hiển thị thông tin file đang sử dụng -->
+                <div id="file-info-status" class="mt-2 text-muted small d-flex align-items-center gap-2">
+                    <span class="badge bg-secondary" id="active-file-badge">Đang kiểm tra dữ liệu...</span>
+                    <span id="active-file-details"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="row g-4">
     <!-- Cột bên trái: Khung chat động kiểu bong bóng -->
@@ -18,7 +49,7 @@
                     <div class="mb-3">
                         <span class="badge bg-primary mb-1">Trợ lý AI</span>
                         <div class="p-3 bg-white rounded-3 shadow-sm d-inline-block">
-                            Xin chào! Tôi là Trợ lý CRM tích hợp AI (Gemini). Tôi có thể giúp gì cho bạn hôm nay?
+                            Xin chào! Tôi là Trợ lý CRM tích hợp AI (Gemini). Bạn có thể tải lên file CSV/Excel ở trên hoặc hỏi tôi bất kỳ thông tin nào về dữ liệu khách hàng!
                         </div>
                     </div>
                 </div>
@@ -26,7 +57,7 @@
                 <!-- Ô NHẬP TEXT VÀ NÚT GỬI -->
                 <div class="p-3 border-top bg-white">
                     <div class="input-group">
-                        <input type="text" id="user-input" class="form-control" placeholder="Ví dụ: KH001 dạo này thế nào?..." autocomplete="off">
+                        <input type="text" id="user-input" class="form-control" placeholder="Ví dụ: File này có bao nhiêu khách nguy cơ rời bỏ? Hoặc hỏi về KH001..." autocomplete="off">
                         <button class="btn btn-primary" id="btn-send" type="button">
                             Gửi AI <i class="bi bi-send ms-1"></i>
                         </button>
@@ -36,32 +67,36 @@
         </div>
     </div>
 
-    <!-- Cột bên phải: Gợi ý câu hỏi (Bấm vào tự động gửi) -->
+    <!-- Cột bên phải: Gợi ý câu hỏi -->
     <div class="col-lg-5">
         <div class="modern-card">
             <div class="card-body">
                 <h5 class="section-title">Gợi ý câu hỏi</h5>
                 <ul class="mb-0" style="list-style-type: disc; padding-left: 20px;">
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Tóm tắt dữ liệu file CSV vừa tải lên?</li>
                     <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Có bao nhiêu khách nguy cơ cao?</li>
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Top 5 khách hàng chi tiêu nhiều nhất là ai?</li>
                     <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Có bao nhiêu khách chưa chăm sóc?</li>
                     <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">KH001 thuộc phân khúc nào?</li>
                     <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">LSTM của KH001 là bao nhiêu?</li>
-                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">XGBoost của KH001 là bao nhiêu?</li>
-                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Ensemble của KH001 là bao nhiêu?</li>
                     <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Accuracy của các mô hình?</li>
-                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Mô hình nào có F1-score cao nhất?</li>
+                    <li class="py-1 suggestion-item" style="cursor: pointer; color: #0d6efd;">Đề xuất phương án giữ chân khách hàng nguy cơ cao?</li>
                 </ul>
             </div>
         </div>
     </div>
 </div>
 
-<!-- JAVASCRIPT XỬ LÝ GỬI TIN NHẮN VÀ CLICK GỢI Ý -->
+<!-- JAVASCRIPT XỬ LÝ GỬI TIN NHẮN, TẢI FILE CSV VÀ CLICK GỢI Ý -->
 <script>
+    document.addEventListener('DOMContentLoaded', loadActiveFileInfo);
+
     document.getElementById('btn-send').addEventListener('click', sendMessage);
     document.getElementById('user-input').addEventListener('keypress', function (e) {
         if (e.key === 'Enter') sendMessage();
     });
+
+    document.getElementById('btn-upload-file').addEventListener('click', uploadAndAnalyzeCSV);
 
     // Khi bấm vào câu hỏi gợi ý ở cột phải -> Tự điền và gửi luôn
     document.querySelectorAll('.suggestion-item').forEach(item => {
@@ -72,6 +107,81 @@
         });
     });
 
+    // Lấy thông tin file hiện tại từ Backend
+    async function loadActiveFileInfo() {
+        try {
+            const response = await fetch('/api/get-file-info');
+            const data = await response.json();
+            const badge = document.getElementById('active-file-badge');
+            const details = document.getElementById('active-file-details');
+
+            if (data.status === 'success' && data.info) {
+                badge.className = 'badge bg-success';
+                badge.textContent = `File: ${data.info.filename || 'Dữ liệu mặc định'}`;
+                details.textContent = `| Tổng KH: ${data.info.total_customers || 0} | Churn: ${data.info.churn_customers || 0} (${data.info.churn_rate || 0}%) | Doanh thu: $${data.info.total_revenue || 0}`;
+            } else {
+                badge.className = 'badge bg-secondary';
+                badge.textContent = 'Chưa tải file mới (Đang dùng dữ liệu mặc định)';
+                details.textContent = '';
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    // Xử lý Tải tệp CSV/Excel lên server
+    async function uploadAndAnalyzeCSV() {
+        const fileInput = document.getElementById('csv-file-input');
+        const file = fileInput.files[0];
+        if (!file) {
+            alert('Vui lòng chọn 1 file CSV hoặc Excel trước khi bấm Tải & Phân tích.');
+            return;
+        }
+
+        const btn = document.getElementById('btn-upload-file');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang phân tích...';
+
+        const formData = new FormData();
+        formData.append('document_file', file);
+
+        try {
+            const response = await fetch('/api/upload-file', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                const info = result.data;
+                const chatBox = document.getElementById('chat-box');
+                chatBox.innerHTML += `
+                    <div class="mb-3">
+                        <span class="badge bg-success mb-1">Hệ thống AI</span>
+                        <br>
+                        <div class="p-3 bg-white text-dark rounded-3 shadow-sm d-inline-block border border-success">
+                            <i class="bi bi-check-circle-fill text-success me-1"></i> <strong>Đã phân tích xong tệp ${info.filename}!</strong><br>
+                            - Tổng số khách hàng: <strong>${info.total_customers}</strong><br>
+                            - Khách nguy cơ rời bỏ: <strong>${info.churn_customers}</strong> (${info.churn_rate}%)<br>
+                            - Tổng doanh thu: <strong>$${info.total_revenue}</strong><br>
+                            <em>Bây giờ bạn có thể đặt câu hỏi cho AI về bộ dữ liệu này!</em>
+                        </div>
+                    </div>
+                `;
+                chatBox.scrollTop = chatBox.scrollHeight;
+                loadActiveFileInfo();
+                fileInput.value = '';
+            } else {
+                alert('Lỗi: ' + (result.message || 'Không thể xử lý file.'));
+            }
+        } catch (error) {
+            alert('Lỗi kết nối khi tải file: ' + error.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-cpu me-1"></i> Tải & Phân tích dữ liệu';
+        }
+    }
+
     async function sendMessage() {
         const inputField = document.getElementById('user-input');
         const chatBox = document.getElementById('chat-box');
@@ -79,7 +189,7 @@
 
         if (!question) return;
 
-        // 1. In tin nhắn của người dùng lên màn hình
+        // 1. In tin nhắn của người dùng
         chatBox.innerHTML += `
             <div class="mb-3 text-end">
                 <span class="badge bg-secondary mb-1">Bạn</span>
@@ -90,7 +200,7 @@
             </div>
         `;
         inputField.value = '';
-        chatBox.scrollTop = chatBox.scrollHeight; // Cuộn xuống đáy
+        chatBox.scrollTop = chatBox.scrollHeight;
 
         // 2. In dòng "Đang suy nghĩ..."
         const loadingId = 'loading-' + Date.now();
@@ -99,14 +209,14 @@
                 <span class="badge bg-primary mb-1">Trợ lý AI</span>
                 <br>
                 <div class="p-3 bg-white rounded-3 shadow-sm d-inline-block text-muted" style="font-style: italic;">
-                    Đang suy nghĩ...
+                    Đang phân tích dữ liệu CSV & trả lời...
                 </div>
             </div>
         `;
         chatBox.scrollTop = chatBox.scrollHeight;
 
         try {
-            // 3. Gửi câu hỏi xuống file app.py (hàm /api/chat)
+            // 3. Gửi câu hỏi xuống server
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -115,15 +225,12 @@
             
             const data = await response.json();
             
-            // 4. Xóa dòng "Đang suy nghĩ..."
             const loadingElem = document.getElementById(loadingId);
             if (loadingElem) loadingElem.remove();
             
-            // Format xuống dòng cho đẹp
             const rawAnswer = data.answer || data.result || 'Không nhận được phản hồi.';
             const formattedAnswer = rawAnswer.replace(/\n/g, '<br>');
 
-            // 5. In câu trả lời của AI lên màn hình
             chatBox.innerHTML += `
                 <div class="mb-3">
                     <span class="badge bg-primary mb-1">Trợ lý AI</span>

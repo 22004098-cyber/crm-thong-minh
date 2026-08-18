@@ -6,8 +6,8 @@
 <!-- CSS Khắc phục trực tiếp lỗi hiển thị màu chữ và tràn khung tên file -->
 <style>
     /* 1. Ép màu chữ mờ (text-muted) sang màu xám sáng để hiển thị rõ trên nền tối */
-    .text-muted, small.text-muted, div.text-muted {
-        color: #cbd5e1 !important; 
+    .bg-dark .text-muted, .bg-dark small.text-muted, .bg-dark div.text-muted {
+        color: #cbd5e1 !important;
     }
     
     /* 2. Sửa nhãn hiển thị Tên File không bị tràn khung và có thiết kế gọn gàng */
@@ -27,7 +27,7 @@
     }
 
     /* Đảm bảo tiêu đề thẻ luôn sáng rõ */
-    .card-title, h2, h3, h5, h6 {
+    .card-title, .bg-dark h2, .bg-dark h3, .bg-dark h5, .bg-dark h6 {
         color: #ffffff !important;
     }
 </style>
@@ -36,7 +36,7 @@
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h3 class="fw-bold text-white mb-1">
+            <h3 class="fw-bold text-dark mb-1">
                 <i class="bi bi-file-earmark-bar-graph text-primary me-2"></i>Phân tích tài liệu & Dữ liệu Bán hàng
             </h3>
             <p class="text-muted mb-0">Tải lên file Excel/CSV bán hàng, dữ liệu NPS để tự động phân tích hành vi và nguy cơ rời bỏ</p>
@@ -155,9 +155,16 @@
     <div class="row">
         <div class="col-12">
             <div class="card bg-dark border-secondary text-white shadow-sm">
-                <div class="card-header border-secondary bg-transparent d-flex justify-content-between align-items-center">
+                <div class="card-header border-secondary bg-transparent d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h5 class="fw-bold mb-0"><i class="bi bi-table text-info me-2"></i>Xem trước kết quả phân tích dữ liệu</h5>
-                    <span class="badge bg-info">Top {{ result.summary_table|length }} Dòng có Recency cao nhất</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <!-- Ô TÌM KIẾM KHÁCH HÀNG -->
+                        <div class="input-group input-group-sm" style="max-width: 280px;">
+                            <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" id="customerSearchInput" class="form-control bg-dark text-white border-secondary" placeholder="Tìm theo Mã KH hoặc Tên KH...">
+                        </div>
+                        <span class="badge bg-info">Top {{ result.summary_table|length }} Dòng có Recency cao nhất</span>
+                    </div>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -165,6 +172,7 @@
                             <thead>
                                 <tr class="border-secondary text-muted">
                                     <th>Mã Khách Hàng (CustomerID)</th>
+                                    <th>TÊN KHÁCH HÀNG</th>
                                     <th>Số ngày chưa quay lại (Recency)</th>
                                     <th>Số đơn hàng</th>
                                     <th>Tổng chi tiêu ($)</th>
@@ -173,8 +181,9 @@
                             </thead>
                             <tbody>
                                 {% for row in result.summary_table %}
-                                <tr class="border-secondary">
-                                    <td class="fw-bold text-info">{{ row.CustomerID }}</td>
+                                <tr class="border-secondary customer-row">
+                                    <td class="fw-bold text-info customer-id" title="{{ row.CustomerID }}">{{ (row.CustomerID|string)[:8] }}</td>
+                                    <td class="customer-name">{{ row.CustomerName }}</td>
                                     <td>{{ row.Recency }} ngày</td>
                                     <td>{{ row.Orders_Count }}</td>
                                     <td class="text-warning fw-bold">${{ "%.2f"|format(row.Total_Spend) }}</td>
@@ -187,6 +196,9 @@
                                     </td>
                                 </tr>
                                 {% endfor %}
+                                <tr id="noResultsRow" class="d-none border-secondary text-center">
+                                    <td colspan="6" class="py-3 text-muted">Không tìm thấy khách hàng phù hợp.</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -197,7 +209,7 @@
     {% endif %}
 </div>
 
-<!-- Script hỗ trợ vòng xoay Loading -->
+<!-- Script hỗ trợ vòng xoay Loading & Chức năng Tìm kiếm -->
 <script>
     document.getElementById('uploadForm').addEventListener('submit', function() {
         var btn = document.getElementById('submitBtn');
@@ -207,6 +219,41 @@
         btn.disabled = true;
         text.classList.add('d-none');
         spinner.classList.remove('d-none');
+    });
+
+    // Tìm kiếm khách hàng tức thì theo Mã KH hoặc Tên KH
+    document.addEventListener('DOMContentLoaded', function() {
+        var searchInput = document.getElementById('customerSearchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                var filter = this.value.toLowerCase().trim();
+                var rows = document.querySelectorAll('.customer-row');
+                var hasVisibleRow = false;
+
+                rows.forEach(function(row) {
+                    var customerIdCell = row.querySelector('.customer-id');
+                    var fullId = customerIdCell ? (customerIdCell.getAttribute('title') || customerIdCell.textContent).toLowerCase() : '';
+                    var nameCell = row.querySelector('.customer-name');
+                    var name = nameCell ? nameCell.textContent.toLowerCase() : '';
+
+                    if (fullId.includes(filter) || name.includes(filter)) {
+                        row.classList.remove('d-none');
+                        hasVisibleRow = true;
+                    } else {
+                        row.classList.add('d-none');
+                    }
+                });
+
+                var noResultsRow = document.getElementById('noResultsRow');
+                if (noResultsRow) {
+                    if (!hasVisibleRow && filter !== '') {
+                        noResultsRow.classList.remove('d-none');
+                    } else {
+                        noResultsRow.classList.add('d-none');
+                    }
+                }
+            });
+        }
     });
 </script>
 {% endblock %}
